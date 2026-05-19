@@ -389,7 +389,7 @@ def task_weather_dashboard():
     draw.text((20, 10), CITY_DISPLAY_NAME, font=font_title, fill=0)
     
     now_beijing = datetime.utcnow() + timedelta(hours=8)
-    update_time = now_beijing.strftime("%H:%M")
+    update_time = now_beijing.strftime("%I:%M %p")
     time_text = f"更新: {update_time}"
     try:
         bbox = draw.textbbox((0, 0), time_text, font=font_small)
@@ -405,7 +405,7 @@ def task_weather_dashboard():
     draw.rounded_rectangle([(235, 45), (385, 130)], radius=8, outline=0, fill=0)
     
     # 🔧修改点 5：调整右侧黑框内文字位置使其居中 (X 从 245 移到 255，Y 轴均匀排开)
-    draw.text((255, 56), f"{weather['wind_info']}", font=font_small, fill=255)
+    draw.text((255, 56), f"{weather['wind_info']}风", font=font_small, fill=255)
     draw.text((255, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
     draw.text((255, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
 
