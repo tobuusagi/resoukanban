@@ -69,17 +69,26 @@ def get_wrapped_lines(text, max_chars=18):
         text = text[max_chars:]
     return lines
 
-def get_clothing_advice(temp):
+def get_clothing_advice(temp, humidity_str):
     try:
         t = int(temp)
-        if t >= 28: return "建议穿短袖、短裤，注意防晒补水。"
-        elif t >= 22: return "体感舒适，建议穿 T 恤配薄长裤。"
-        elif t >= 16: return "建议穿长袖衬衫、卫衣或单层薄外套。"
-        elif t >= 10: return "气温微凉，建议穿夹克、风衣或毛衣。"
-        elif t >= 5: return "建议穿大衣、厚毛衣或薄款羽绒服。"
-        else: return "天气寒冷，建议穿厚羽绒服，注意防寒。"
+        # 提取湿度数字（去掉百分号）
+        h = int(humidity_str.replace('%', '')) if isinstance(humidity_str, str) else int(humidity_str)
+        
+        if t >= 28:
+            return "闷热，穿透气短袖短裤。" if h >= 70 else "炎热，穿薄短袖并防晒。"
+        elif t >= 22:
+            return "湿热，建议穿宽松T恤。" if h >= 70 else "舒适，穿T恤配单裤即可。"
+        elif t >= 16:
+            return "偏湿凉，穿长袖加薄外套。" if h >= 70 else "清凉，穿长袖衬衫或卫衣。"
+        elif t >= 10:
+            return "湿冷透骨，建议穿厚夹克。" if h >= 70 else "偏冷，穿风衣或保暖毛衣。"
+        elif t >= 5:
+            return "湿冷，穿大衣及保暖内衣。" if h >= 60 else "干冷，建议穿大衣薄羽绒。"
+        else:
+            return "严寒，穿厚羽绒服重保暖。"
     except:
-        return "请根据实际体感气温调整着装。"
+        return "请据体感气温调整着装。"
 
 def push_image(img, page_id):
     if str(page_id) not in ENABLED_PAGES:
@@ -419,7 +428,7 @@ def task_weather_dashboard():
         draw.text((x, 200), day["weather"], font=font_item, fill=0)
         draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
-    advice = get_clothing_advice(weather['temp_curr'])
+    advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
     draw.line([(20, 250), (380, 250)], fill=0, width=1)
     advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]
     for i, line in enumerate(advice_lines[:2]):
