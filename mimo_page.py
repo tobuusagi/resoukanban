@@ -274,7 +274,7 @@ def main():
         
         # 💡 [数据整包灌注]：不提供现成逻辑建议，将温湿度原始指标交给 AI 自行判断
         raw_prompt = (
-            f"位置：{'新北主家' if target_adcode==ADCODE_XINBEI else '天宁校区'}\n"
+            f"位置：{'书香世家' if target_adcode==ADCODE_XINBEI else '田家炳高级中学'}\n"
             f"实时天气：{weather['weather']}\n"
             f"当前温度：{weather['temp_curr']}°C\n"
             f"全天气温：{weather['temp_low']}°C ~ {weather['temp_high']}°C\n"
