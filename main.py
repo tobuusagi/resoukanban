@@ -99,7 +99,7 @@ def get_weather_icon(weather_str):
     if "雾" in weather_str or "霾" in weather_str: return "🌫"
     return "✧"
 
-# 🛠️ 新增函数 1：根据像素宽度在右端强行截断文本，绝不溢出或折行
+# 🛠️ 像素级右端强行截断工具函数
 def truncate_text_by_pixels(draw, text, font, max_width):
     """根据指定的像素宽度，在右端直接切断文本"""
     current_line = ""
@@ -183,7 +183,7 @@ def get_lunar_or_festival(y, m, d):
         if (lm, ld) in lunar_fests: return lunar_fests[(lm, ld)]
         days = ["初一","初二","初三","初四","初五","初六","初七","初八","初九","初十",
                 "十一","十二","十三","十四","十五","十六","十七","十八","十九","二十",
-                "廿一","廿二","廿三","廿外","廿五","廿六","廿七","廿八","廿九","三十"]
+                "廿一","廿二","廿三","廿四","廿五","廿六","廿七","廿八","廿九","三十"]
         months = ["正月","二月","三月","四月","五月","六月","七月","八月","九月","十月","冬月","腊月"]
         if ld == 1: return months[lm-1]
         return days[ld-1]
@@ -215,21 +215,25 @@ def get_hotlist_data(source):
         titles = ["数据获取失败，请检查配置"] * 10
     return titles[:20]
 
-# 🛠️ 新增函数 2：从云端拉取未完成的日程列表
+# 🛠️ 修复核心 1：对齐 sync_calendar.py 原版拉取逻辑，移除无效的过滤参数防止请求落空
 def get_todo_data():
-    """从 Zectrix 服务端获取未完成的日程数据"""
-    if not API_KEY or not TARGET_DEVICES:
+    """从云端获取全量日程列表"""
+    if not API_KEY:
         return []
     try:
         url = "https://cloud.zectrix.com/open/v1/todos"
-        # 多设备公用：默认取列表中第一个可用设备的绑定的账号日程
-        params = {"status": 0, "deviceId": TARGET_DEVICES[0]}
         headers = {"X-API-Key": API_KEY}
-        res = requests.get(url, headers=headers, params=params, timeout=10).json()
-        if res.get("code") == 0:
-            return res.get("data", [])
+        res = requests.get(url, headers=headers, timeout=10).json()
+        
+        # 实时日志输出：便于在 GitHub Actions 中排查接口到底有没有吐出数据
+        print(f"📊 DEBUG - 云端日程接口原始返回类型: {type(res)}")
+        
+        if isinstance(res, list):
+            return res
+        if isinstance(res, dict):
+            return res.get("data", []) or res.get("todos", [])
     except Exception as e:
-        print(f"❌ 获取云端日程失败: {e}")
+        print(f"❌ 获取云端日程发生网络异常: {e}")
     return []
 
 # --- 任务：热搜看板 ---
@@ -476,44 +480,53 @@ def task_weather_dashboard():
 
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
-    # 🛠️ 核心：筛选当天或明天的日程数据
-    if now_beijing.hour >= 23:
-        target_date = (now_beijing + timedelta(days=1)).strftime("%Y-%m-%d")
-    else:
-        target_date = now_beijing.strftime("%Y-%m-%d")
-        
+    # 🛠️ 修复核心 2：重构未来天气与日程渲染模块，采用确定性列位置注入
     all_todos = get_todo_data()
-    target_todos = [t for t in all_todos if t.get("dueDate") == target_date]
-    target_todos.sort(key=lambda x: x.get("dueTime", ""))
-    display_todos = target_todos[:3]  # 最多拉取展示3条
+    today_str = now_beijing.strftime("%Y-%m-%d")
     
-    # 未来三天天气栏（当有日程数据时，第三个位置将被日程框覆盖拦截）
-    x_positions = [20, 145, 270]
-    for i, day in enumerate(weather['forecasts'][:3]):
-        if i < len(x_positions):
-            x = x_positions[i]
-            
-            # 🛠️ 拦截：当有日程时，隐藏原本第3列的天气，改画日程黑框
-            if i == 2 and display_todos:
-                # 绘制日程专用黑框
-                draw.rounded_rectangle([(260, 165), (385, 245)], radius=8, outline=0, fill=0)
-                
-                todo_y = 171
-                for todo in display_todos:
-                    title_clean = todo.get("title", "").replace("[日历]", "").strip()
-                    time_str = todo.get("dueTime", "")
-                    display_text = f"{time_str} {title_clean}".strip()
-                    
-                    # 强行用像素宽度截断文本，黑框有效可用总宽112像素，字号精准对齐湿度使用 font_small
-                    truncated_line = truncate_text_by_pixels(draw, display_text, font_small, max_width=112)
-                    draw.text((268, todo_y), truncated_line, font=font_small, fill=255)
-                    todo_y += 24
-                continue  # 跳过渲染当前槽位的天气，完成覆盖操作
-                
+    # 智能过滤：只捞取今天及以后的未完成任务，防止由于“今天无日程”导致黑框完全隐形
+    target_todos = [t for t in all_todos if t.get("dueDate") and t.get("dueDate") >= today_str]
+    target_todos = [t for t in target_todos if t.get("status") in [0, "0", None]]
+    target_todos.sort(key=lambda x: (x.get("dueDate", ""), x.get("dueTime", "")))
+    display_todos = target_todos[:3]
+    
+    print(f"ℹ️ DEBUG - 过滤排序后准备上屏显示的日程条数: {len(display_todos)}")
+
+    # 渲染前两列固定天气 (今天、明天)
+    for i in range(2):
+        if i < len(weather['forecasts']):
+            day = weather['forecasts'][i]
+            x = [20, 145][i]
             draw.text((x, 175), day["date"], font=font_item, fill=0)
             wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
             draw.text((x, 200), wx_str, font=font_item, fill=0)
             draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+
+    # 渲染第三列 (x=270)：如果有日程，绘制黑框；如果没有，自动退回大后天天气预报
+    if display_todos:
+        # 绘制日程专用黑框
+        draw.rounded_rectangle([(260, 165), (385, 245)], radius=8, outline=0, fill=0)
+        
+        todo_y = 171
+        for todo in display_todos:
+            title_clean = todo.get("title", "").replace("[日历]", "").strip()
+            time_str = todo.get("dueTime", "")
+            display_text = f"{time_str} {title_clean}".strip() if time_str else title_clean
+            
+            # 严格截断控制：字号精准绑定 font_small（和湿度绝对一致），总可用宽度 112 像素
+            truncated_line = truncate_text_by_pixels(draw, display_text, font_small, max_width=112)
+            draw.text((268, todo_y), truncated_line, font=font_small, fill=255)
+            todo_y += 24
+    else:
+        # 兜底：无日程时恢复原第 3 列天气
+        if len(weather['forecasts']) >= 3:
+            day = weather['forecasts'][2]
+            x = 270
+            draw.text((x, 175), day["date"], font=font_item, fill=0)
+            wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
+            draw.text((x, 200), wx_str, font=font_item, fill=0)
+            draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+
 
     advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
     draw.line([(20, 250), (380, 250)], fill=0, width=1)
