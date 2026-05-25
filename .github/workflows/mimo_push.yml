@@ -1,5 +1,6 @@
 name: Zectrix Ink Screen Page5 Push
-
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 on:
   schedule:
     - cron: '30 22 * * *'  # 北京时间 06:30 自动触发晨间早报
@@ -17,7 +18,7 @@ jobs:
     - name: Set up Python Environment
       uses: actions/setup-python@v5
       with:
-        python-module-cache: 'true'
+        cache: 'pip'
         python-version: '3.10'
 
     - name: Install Runtime Dependencies
