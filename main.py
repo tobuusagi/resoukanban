@@ -2,6 +2,7 @@ import os
 import requests
 import calendar
 import re
+import math
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta
 from zhdate import ZhDate
@@ -18,15 +19,11 @@ ENABLED_PAGES = "1,2,3,4"
 HOTLIST_SOURCE = "bilibili"  # 在这里修改你想看的热搜源
 
 # 3. 天气城市设置
-# 高德天气城市代码（默认：天津市津南区 120112，北京是 110000）
+# 高德天气城市代码（默认：常州天宁区 320402）
 CITY_ADCODE = "320402"                      
 
 # 日出日落位置（支持拼音，如 "Beijing" 或 "Haidian,Beijing"）
 WTTR_LOCATION = "Tianning,Changzhou"            
-
-# 4. 屏幕显示文字
-# 天气页面左上角的自定义标题，你可以改成 "北京市 | 我的温馨小窝" 等等
-CITY_DISPLAY_NAME = "天宁区 | 田家炳高级中学"      
 
 
 # =====================================================================
@@ -234,221 +231,4 @@ def task_hotlist():
             
             # 左侧黑底数字序号框 (适配 18 号字)
             draw.rounded_rectangle([(10, y), (36, y+24)], radius=6, fill=0)
-            num_x = 18 if current_num < 10 else 11
-            draw.text((num_x, y+3), str(current_num), font=font_small, fill=255)
-            
-            curr_y = y + 1
-            for line in lines:
-                draw.text((45, curr_y), line, font=font_item, fill=0)
-                curr_y += line_height
-                
-            y += max(24, required_h) + item_gap
-            last_idx = i + 1
-            
-            # 画分割线
-            if y < 290:
-                draw.line([(45, y - item_gap/2), (380, y - item_gap/2)], fill=0, width=1)
-                
-        return last_idx
-
-    next_s = 0
-    if "1" in ENABLED_PAGES:
-        print("生成 Page 1: 热搜 (上)...")
-        # 🔧修改点 1：将 '1' 改为 'L'
-        img1 = Image.new('1', (400, 300), color=255)
-        next_s = draw_list(ImageDraw.Draw(img1), f"◆ {title_display} (一)", titles, 0)
-        push_image(img1, 1)
-
-    if "2" in ENABLED_PAGES:
-        print("生成 Page 2: 热搜 (下)...")
-        # 🔧修改点 2：将 '1' 改为 'L'
-        img2 = Image.new('1', (400, 300), color=255)
-        start_index = next_s if "1" in ENABLED_PAGES else 7
-        draw_list(ImageDraw.Draw(img2), f"◆ {title_display} (二)", titles, start_index)
-        push_image(img2, 2)
-
-# --- 任务：日历（保持不变） ---
-def task_calendar():
-    if "3" not in ENABLED_PAGES: return
-    print("生成 Page 3: 日历...")
-    # 🔧修改点 3：将 '1' 改为 'L'
-    img = Image.new('1', (400, 300), color=255)
-    draw = ImageDraw.Draw(img)
-    now_utc = datetime.utcnow()
-    now = now_utc + timedelta(hours=8)
-    y, m, today = now.year, now.month, now.day
-    draw.text((20, 10), str(m), font=font_huge, fill=0)
-    draw.text((90, 20), now.strftime("%B"), font=font_title, fill=0)
-    draw.text((90, 48), str(y), font=font_item, fill=0)
-    draw.line([(20, 78), (380, 78)], fill=0, width=2)
-    headers = ["日", "一", "二", "三", "四", "五", "六"]
-    col_w = 53
-    for i, h in enumerate(headers):
-        draw.text((25 + i*col_w, 88), h, font=font_small, fill=0)
-    calendar.setfirstweekday(calendar.SUNDAY)
-    cal = calendar.monthcalendar(y, m)
-    curr_y, row_h = 115, 38
-    for week in cal:
-        for c, day in enumerate(week):
-            if day != 0:
-                dx = 25 + c * col_w
-                if day == today:
-                    draw.rounded_rectangle([(dx-3, curr_y-2), (dx+35, curr_y+32)], radius=5, outline=0)
-                draw.text((dx+2, curr_y), str(day), font=font_item, fill=0)
-                bottom_text = get_lunar_or_festival(y, m, day)
-                if bottom_text:
-                    if len(bottom_text) > 3:
-                        try:
-                            font_smaller = ImageFont.truetype(FONT_PATH, 10)
-                            draw.text((dx+2, curr_y+18), bottom_text, font=font_smaller, fill=0)
-                        except:
-                            draw.text((dx+2, curr_y+18), bottom_text[:3], font=font_tiny, fill=0)
-                    else:
-                        draw.text((dx+2, curr_y+18), bottom_text, font=font_tiny, fill=0)
-        curr_y += row_h
-    push_image(img, 3)
-
-# --- 混合天气获取（保持不变） ---
-def get_hybrid_weather():
-    result = {
-        "city": CITY_DISPLAY_NAME.split("|")[0].strip(), "weather": "未知", "temp_curr": 0, 
-        "temp_low": 0, "temp_high": 0, "wind_info": "无数据", "humidity": "0%", 
-        "feel_temp": "N/A", "sunrise": "--:--", "sunset": "--:--", "forecasts": []
-    }
-    
-    if not AMAP_KEY:
-        print("⚠️ 未设置 AMAP_WEATHER_KEY，无法获取高德数据")
-        return result
-
-    # 1. 高德实时
-    try:
-        base_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={CITY_ADCODE}&key={AMAP_KEY}&extensions=base"
-        base_resp = requests.get(base_url, timeout=10).json()
-        if base_resp.get("status") == "1" and base_resp.get("lives"):
-            live = base_resp["lives"][0]
-            result["weather"] = live.get("weather", "未知")
-            result["temp_curr"] = int(live.get("temperature", 0))
-            result["humidity"] = live.get("humidity", "0") + "%"
-            wind_power_raw = live.get("windpower", "0")
-            wind_direction = live.get("winddirection", "")
-            wind_num = re.search(r'\d+', wind_power_raw)
-            wind_power = wind_num.group(0) if wind_num else "0"
-            result["wind_info"] = f"{wind_power}级 {wind_direction}"
-            # 计算体感温度
-            try:
-                wind_speed = int(wind_power)
-                if wind_speed <= 1: wind_kmh = 2
-                elif wind_speed == 2: wind_kmh = 8
-                else: wind_kmh = 15 + (wind_speed - 3) * 7
-                feel_temp = result["temp_curr"] - (wind_kmh / 15) if wind_kmh > 5 else result["temp_curr"]
-                if int(live.get("humidity", 50)) > 70: feel_temp -= 1
-                result["feel_temp"] = f"{round(feel_temp, 1)}°C"
-            except:
-                result["feel_temp"] = f"{result['temp_curr']}°C"
-    except Exception as e:
-        print(f"❌ 高德实时请求异常: {e}")
-
-    # 2. 高德预报
-    try:
-        all_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={CITY_ADCODE}&key={AMAP_KEY}&extensions=all"
-        all_resp = requests.get(all_url, timeout=10).json()
-        if all_resp.get("status") == "1" and all_resp.get("forecasts"):
-            casts = all_resp["forecasts"][0].get("casts", [])
-            if len(casts) >= 1:
-                result["temp_low"] = int(casts[0].get("nighttemp", 0))
-                result["temp_high"] = int(casts[0].get("daytemp", 0))
-            for idx in [1, 2]:
-                if idx < len(casts):
-                    day = casts[idx]
-                    result["forecasts"].append({
-                        "date": day.get("date", "")[5:],
-                        "weather": day.get("dayweather", "未知"),
-                        "temp_low": int(day.get("nighttemp", 0)),
-                        "temp_high": int(day.get("daytemp", 0))
-                    })
-    except Exception as e:
-        print(f"❌ 高德预报请求异常: {e}")
-
-    # 3. wttr.in 日出日落
-    try:
-        wttr_url = f"https://wttr.in/{WTTR_LOCATION}?format=j1&lang=zh"
-        wttr_resp = requests.get(wttr_url, timeout=15).json()
-        astro = wttr_resp['weather'][0]['astronomy'][0]
-        result["sunrise"] = astro['sunrise']
-        result["sunset"] = astro['sunset']
-    except Exception as e:
-        print(f"❌ wttr.in 请求异常: {e}")
-
-    return result
-
-# --- 任务：天气看板 ---
-def task_weather_dashboard():
-    if "4" not in ENABLED_PAGES: return
-    print("生成 Page 4: 混合天气看板...")
-    # 🔧修改点 4：将 '1' 改为 'L'
-    img = Image.new('1', (400, 300), color=255)
-    draw = ImageDraw.Draw(img)
-
-    weather = get_hybrid_weather()
-    if weather["temp_curr"] == 0 and not weather["forecasts"]:
-        draw.text((20, 50), "天气数据获取失败，请检查 API Key 或网络", font=font_item, fill=0)
-        push_image(img, 4)
-        return
-
-    draw.text((20, 10), CITY_DISPLAY_NAME, font=font_title, fill=0)
-    
-    now_beijing = datetime.utcnow() + timedelta(hours=8)
-    update_time = now_beijing.strftime("%I:%M %p")
-    time_text = f"更新: {update_time}"
-    try:
-        bbox = draw.textbbox((0, 0), time_text, font=font_small)
-        time_width = bbox[2] - bbox[0]
-    except:
-        time_width = len(time_text) * 8
-    draw.text((390 - time_width, 12), time_text, font=font_small, fill=0)
-
-    draw.text((25, 40), f"{weather['temp_curr']}°C", font=font_48, fill=0)
-    draw.text((25, 100), f"{weather['temp_low']}°/{weather['temp_high']}°", font=font_item, fill=0)
-    draw.text((150, 45), f"{weather['weather']}", font=font_36, fill=0)
-
-    draw.rounded_rectangle([(235, 45), (385, 130)], radius=8, outline=0, fill=0)
-    
-    # 🔧修改点 5：调整右侧黑框内文字位置使其居中 (X 从 245 移到 255，Y 轴均匀排开)
-    draw.text((255, 56), f"{weather['wind_info']}风", font=font_small, fill=255)
-    draw.text((255, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
-    draw.text((255, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
-
-    draw.text((25, 135), f"日出 {weather['sunrise']}   日落 {weather['sunset']}", font=font_item, fill=0)
-
-    draw.line([(20, 160), (380, 160)], fill=0, width=1)
-    x_positions = [30, 200]
-    for i, day in enumerate(weather['forecasts'][:2]):
-        x = x_positions[i]
-        draw.text((x, 175), day["date"], font=font_item, fill=0)
-        draw.text((x, 200), day["weather"], font=font_item, fill=0)
-        draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
-
-    advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
-    draw.line([(20, 250), (380, 250)], fill=0, width=1)
-    advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]
-    for i, line in enumerate(advice_lines[:2]):
-        draw.text((20, 262 + i*24), f"[衣] {line}", font=font_item, fill=0)
-
-    push_image(img, 4)
-
-# ================= 主程序 =================
-if __name__ == "__main__":
-    if not API_KEY or not MAC_ADDRESS:
-        print("❌ 错误: 请先在 GitHub Secrets 中配置 ZECTRIX_API_KEY 和 ZECTRIX_MAC")
-        exit(1)
-        
-    print("🚀 开始执行墨水屏推送任务...")
-    
-    # 执行热搜任务
-    task_hotlist()
-    # 执行日历任务
-    task_calendar()
-    # 执行天气任务
-    task_weather_dashboard()
-        
-    print("🎉 所有任务执行完毕！")
+            num_x = 18 if current
