@@ -451,7 +451,7 @@ def task_weather_dashboard():
     draw.text((385 - time_w, 15), time_text, font=font_item, fill=0)
 
     # 2. 当日最高最低气温
-    draw.text((25, 45), f"{weather['temp_low']}°/{weather['temp_high']}°", font=font_item, fill=0)
+    draw.text((25, 45), f"{weather['temp_low']}° /{weather['temp_high']}°", font=font_item, fill=0)
     
     # 3. 实时温度
     curr_temp_str = f"{weather['temp_curr']}°"
