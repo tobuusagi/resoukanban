@@ -26,7 +26,7 @@ TARGET_DEVICES = list(set([m.strip() for m in MAC_ADDRESSES if m and m.strip()])
 FONT_PATH = "font.ttf"
 try:
     font_title = ImageFont.truetype(FONT_PATH, 22)
-    font_item = ImageFont.truetype(FONT_PATH, 16)
+    font_item = ImageFont.truetype(FONT_PATH, 15) # 稍微缩小字号防原始数据略长时溢出
     font_small = ImageFont.truetype(FONT_PATH, 13)
 except:
     print("❌ 错误: 找不到 font.ttf，请确保仓库中存在该字体文件")
@@ -53,13 +53,13 @@ def get_todo_data():
     return []
 
 def check_holiday_api(date_str):
-    """通过 Timor API 判定法定节假日状态 (0工作日, 1周末, 2节日, 3调休班)"""
+    """通过 Timor API 判定法定节假日状态"""
     try:
         url = f"http://timor.tech/api/holiday/info/{date_str}"
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5).json()
         if res.get("code") == 0:
             type_info = res.get("type", {}).get("type")
-            return type_info in [1, 2]  # 周末或法定节假日返回 True
+            return type_info in [1, 2]
     except Exception as e:
         print(f"⚠️ Timor 节假日接口调用失败，启用本地星期兜底: {e}")
     try:
@@ -82,11 +82,11 @@ def get_coordinates(address, key):
 def get_traffic_info(origin_name, dest_name, key):
     """高德路径规划获取实时通勤路况"""
     if not key:
-        return "未配置高德Key，无法获取路况。"
+        return "未配置高德Key，路况不可用。"
     o_coor = get_coordinates(origin_name, key)
     d_coor = get_coordinates(dest_name, key)
     if not o_coor or not d_coor:
-        return "无法解析地址坐标，路况暂时不可用。"
+        return "地址解析失败。"
     try:
         url = f"https://restapi.amap.com/v3/direction/driving?origin={o_coor}&destination={d_coor}&key={key}&extensions=all"
         res = requests.get(url, timeout=7).json()
@@ -95,7 +95,7 @@ def get_traffic_info(origin_name, dest_name, key):
             distance_km = round(int(path["distance"]) / 1000, 1)
             duration_min = round(int(path["duration"]) / 60)
             info_status = path.get("info", "畅通")
-            return f"从 {origin_name.split('区')[-1]} 到 {dest_name.split('区')[-1]}，全程 {distance_km}公里，当前驾车预计耗时 {duration_min}分钟 ({info_status})。"
+            return f"驾车{distance_km}km, 耗时约{duration_min}分钟 ({info_status})"
     except Exception as e:
         print(f"❌ 路径规划请求异常: {e}")
     return "路况数据刷新超时。"
@@ -153,8 +153,9 @@ def call_mimo_llm(prompt_content):
     mimo_model = os.environ.get("MIMO_MODEL", "mimo-v2.5")
     
     if not mimo_key:
-        print("⚠️ 未配置 MIMO_API_KEY，返回本地原始模板")
-        return prompt_content[:150]
+        print("⚠️ 未检测到真实 MIMO_API_KEY，切换至本地原始数据渲染")
+        clean_prompt = prompt_content.replace("【晨报数据】\n", "").replace("【晚报数据】\n", "")
+        return f"⚠️ 缺少大模型配置，显示原始简报：\n{clean_prompt}"
         
     headers = {"Authorization": f"Bearer {mimo_key}", "Content-Type": "application/json"}
     payload = {
@@ -169,11 +170,22 @@ def call_mimo_llm(prompt_content):
         "temperature": 0.3
     }
     try:
-        res = requests.post(mimo_url, headers=headers, json=payload, timeout=20).json()
-        return res["choices"][0]["message"]["content"].strip()
+        print(f"📡 正在发起大模型请求 URL: {mimo_url} | 模型: {mimo_model}")
+        response = requests.post(mimo_url, headers=headers, json=payload, timeout=20)
+        print(f"📥 大模型响应状态码: {response.status_code}")
+        
+        res = response.json()
+        if response.status_code == 200 and "choices" in res:
+            return res["choices"][0]["message"]["content"].strip()
+        else:
+            print(f"❌ 大模型接口返回了错误体: {res}")
+            raise Exception(f"HTTP {response.status_code}")
+            
     except Exception as e:
-        print(f"❌ MiMo 大模型调用失败: {e}")
-        return "数据整合失败，请阅读下屏原始简报。"
+        print(f"❌ MiMo 大模型调用失败严重异常: {e}")
+        # 💡 [关键修复]: 大模型崩掉时，把原始收集到的关键天气、路况、日程等干净数据呈现在下面，绝不留白
+        clean_prompt = prompt_content.replace("【晨报数据】\n", "").replace("【晚报数据】\n", "")
+        return f"⚠️ 智整失败(AI接口异常)\n📊 原始简报如下:\n{clean_prompt}"
 
 # =====================================================================
 # 🎨 图像像素级安全排版渲染与推送
@@ -204,15 +216,18 @@ def push_page_5(final_text, title_tag):
     img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
     
+    # 顶部横幅
     draw.rounded_rectangle([(10, 10), (390, 45)], radius=6, fill=0)
     draw.text((20, 16), title_tag, font=font_title, fill=255)
     
+    # 内容渲染
     lines = wrap_text_by_pixels(draw, final_text, font_item, max_width=370)
     y_cursor = 60
-    for line in lines[:10]:
+    for line in lines[:11]:  # 容纳更多行展示原始备份
         draw.text((15, y_cursor), line, font=font_item, fill=0)
-        y_cursor += 22
+        y_cursor += 21
 
+    # 推送逻辑
     img_path = "page_5.png"
     img.save(img_path)
     if not API_KEY:
@@ -271,11 +286,10 @@ def main():
         
         raw_prompt = (
             f"【晨报数据】\n"
-            f"日期：{today_str}\n"
-            f"气象：{'新北主家' if target_adcode==ADCODE_XINBEI else '天宁校区'}·{weather['weather']}，当前{weather['temp_curr']}°C({weather['temp_low']}°~{weather['temp_high']}°)，湿度{weather['humidity']}，体感{weather['feel_temp']}。\n"
-            f"着装建议：{advice}\n"
-            f"今日日程：{todo_str}\n"
-            f"即时路况：{traffic_str}"
+            f"天气：{'新北' if target_adcode==ADCODE_XINBEI else '天宁'}·{weather['weather']} {weather['temp_curr']}°C({weather['temp_low']}°~{weather['temp_high']}°)\n"
+            f"建议：{advice}\n"
+            f"日程：{todo_str}\n"
+            f"路况：{traffic_str}"
         )
         
         print("💡 正在提交 MiMo 模型构建晨报...")
@@ -297,11 +311,10 @@ def main():
         
         raw_prompt = (
             f"【晚报数据】\n"
-            f"预报日期：明日({tomorrow_str})\n"
-            f"明日气象预测：{'新北主家' if tomorrow_adcode==ADCODE_XINBEI else '天宁校区'}·{weather_tomorrow['weather']}，气温{weather_tomorrow['temp_low']}°~{weather_tomorrow['temp_high']}°。\n"
-            f"备衣建议：{advice_tomorrow}\n"
-            f"明日行程预告：{todo_str}\n"
-            f"今晚返程路况：{traffic_str}"
+            f"明日天气：{'新北' if tomorrow_adcode==ADCODE_XINBEI else '天宁'}·{weather_tomorrow['weather']} {weather_tomorrow['temp_low']}°~{weather_tomorrow['temp_high']}°\n"
+            f"备衣：{advice_tomorrow}\n"
+            f"明日日程：{todo_str}\n"
+            f"今晚路况：{traffic_str}"
         )
         
         print("💡 正在提交 MiMo 模型构建晚报...")
