@@ -85,18 +85,14 @@ def get_clothing_advice(temp, humidity_str):
     except:
         return "请据体感气温调整着装。"
 
-# 🌟 优化：精细化文本天气图标映射函数（区分大中小雨）
+# 🌟 文本天气图标映射函数
 def get_weather_icon(weather_str):
     if "晴" in weather_str: return "☀"
     if "多云" in weather_str: return "⛅"
     if "阴" in weather_str: return "☁"
     if "雪" in weather_str: return "❄"
     if "雷" in weather_str: return "⛈"
-    # 精细区分大中小雨，不使用伞
-    if "大雨" in weather_str or "暴雨" in weather_str: return "⛈"
-    if "中雨" in weather_str: return "🌧"
-    if "小雨" in weather_str or "阵雨" in weather_str: return "🌦"
-    if "雨" in weather_str: return "🌧"  # 其他雨天兜底
+    if "雨" in weather_str: return "☂"
     if "雾" in weather_str or "霾" in weather_str: return "🌫"
     return "✧"
 
@@ -390,51 +386,46 @@ def task_weather_dashboard():
         push_image(img, 4)
         return
 
-    # 日期与更新时间行
+    # 1. 日期行设置
     now_beijing = datetime.utcnow() + timedelta(hours=8)
     youbi_list = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
     youbi = youbi_list[now_beijing.weekday()]
     date_display = f"天宁区 | {now_beijing.month}月{now_beijing.day}日 {youbi}"
     
-    draw.text((20, 15), date_display, font=font_item, fill=0)
+    # 调整天宁区起点为 x=25，与下方的气温左端对齐
+    draw.text((25, 15), date_display, font=font_item, fill=0)
     
+    # 将更新时间的字号与天宁区统一（font_item），且与右侧黑色背景框边缘（x=385）右对齐
     update_time = now_beijing.strftime("%I:%M %p")
     time_text = f"更新: {update_time}"
     try:
-        bbox = draw.textbbox((0, 0), time_text, font=font_small)
-        time_width = bbox[2] - bbox[0]
-    except:
-        time_width = len(time_text) * 8
-    draw.text((390 - time_width, 12), time_text, font=font_small, fill=0)
+        time_w = draw.textlength(time_text, font=font_item)
+    except AttributeError:
+        time_w = draw.textbbox((0, 0), time_text, font=font_item)[2] - draw.textbbox((0, 0), time_text, font=font_item)[0]
+    draw.text((385 - time_w, 15), time_text, font=font_item, fill=0)
 
-    # 气温排布
-    draw.text((25, 45), f"{weather['temp_low']}°/{weather['temp_high']}°", font=font_title, fill=0)
+    # 2. 当日最高最低气温：缩小字号至 font_item，起点为 x=25
+    draw.text((25, 45), f"{weather['temp_low']}°/{weather['temp_high']}°", font=font_item, fill=0)
     
-    curr_temp_str = f"{weather['temp_curr']}°C"
+    # 3. 实时温度：数值字号保持 font_48，但去掉“C”只保留“°”
+    curr_temp_str = f"{weather['temp_curr']}°"
     draw.text((25, 75), curr_temp_str, font=font_48, fill=0)
     
-    # 动态计算温度文本宽度，以此向右排布天气和图标
+    # 动态计算温度数字宽度，以便向右排布天气文字
     try:
         temp_w = draw.textlength(curr_temp_str, font=font_48)
     except AttributeError:
         temp_w = draw.textbbox((0, 0), curr_temp_str, font=font_48)[2] - draw.textbbox((0, 0), curr_temp_str, font=font_48)[0]
     
-    wx_x = 25 + temp_w + 10
-    draw.text((wx_x, 75), weather['weather'], font=font_48, fill=0)
+    wx_x = 25 + temp_w + 12
+    # 当前天气文字：缩小一号至 font_36，放在 y=85 处完美配合 48 号字的基准线
+    draw.text((wx_x, 85), weather['weather'], font=font_36, fill=0)
     
-    # 🌟 优化：实时天气后方加入“放大并垂直居中”的动态图标
-    try:
-        wx_w = draw.textlength(weather['weather'], font=font_48)
-    except AttributeError:
-        wx_w = draw.textbbox((0, 0), weather['weather'], font=font_48)[2] - draw.textbbox((0, 0), weather['weather'], font=font_48)[0]
-        
-    icon_x = wx_x + wx_w + 12
+    # 4. 当前天气小图标：放在当日最高最低气温后面（y=45），但横向与即时天气文字完美对齐（x=wx_x）
     current_icon = get_weather_icon(weather['weather'])
-    
-    # 将字号放大至 font_huge (65)，并调准 Y 轴坐标至 66 实现与 48号字天气文本的纵向居中对齐
-    draw.text((icon_x, 66), current_icon, font=font_huge, fill=0)
+    draw.text((wx_x, 45), current_icon, font=font_item, fill=0)
 
-    # 侧边黑框（原位置不动）
+    # 侧边右侧黑色背景框（原尺寸与位置不变）
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
     
     draw.text((270, 56), f"{weather['wind_info']}风", font=font_small, fill=255)
@@ -445,14 +436,14 @@ def task_weather_dashboard():
 
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
-    # 未来三天天气栏（同样享受新雨天图标逻辑）
+    # 未来三天天气栏
     x_positions = [20, 145, 270]
     for i, day in enumerate(weather['forecasts'][:3]):
         if i < len(x_positions):
             x = x_positions[i]
             draw.text((x, 175), day["date"], font=font_item, fill=0)
             
-            # 将图标附加在文本后面
+            # 未来天气的图标附加在文本后面
             wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
             draw.text((x, 200), wx_str, font=font_item, fill=0)
             
