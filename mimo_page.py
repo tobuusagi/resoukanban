@@ -149,8 +149,8 @@ def get_clothing_advice(temp, humidity_str):
 # =====================================================================
 def call_mimo_llm(prompt_content):
     mimo_key = os.environ.get("MIMO_API_KEY")
-    mimo_url = os.environ.get("MIMO_API_URL", "https://platform.xiaomimimo.com/v1/chat/completions")
-    mimo_model = os.environ.get("MIMO_MODEL", "mimo-v2.5")
+    mimo_url = os.environ.get("MIMO_API_URL", "https://api.xiaomimimo.com/v1/chat/completions")
+    mimo_model = os.environ.get("mimo-v2.5")
     
     if not mimo_key:
         print("⚠️ 未检测到真实 MIMO_API_KEY，切换至本地原始数据渲染")
