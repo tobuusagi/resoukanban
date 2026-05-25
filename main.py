@@ -69,9 +69,7 @@ def get_wrapped_lines(text, max_chars=18):
 def get_clothing_advice(temp, humidity_str):
     try:
         t = int(temp)
-        # 提取湿度数字（去掉百分号）
         h = int(humidity_str.replace('%', '')) if isinstance(humidity_str, str) else int(humidity_str)
-        
         if t >= 28:
             return "闷热，穿透气短袖短裤。" if h >= 70 else "炎热，穿薄短袖并防晒。"
         elif t >= 22:
@@ -86,6 +84,17 @@ def get_clothing_advice(temp, humidity_str):
             return "严寒，穿厚羽绒服重保暖。"
     except:
         return "请据体感气温调整着装。"
+
+# 🌟 新增：文本天气图标映射函数
+def get_weather_icon(weather_str):
+    if "晴" in weather_str: return "☀"
+    if "多云" in weather_str: return "⛅"
+    if "阴" in weather_str: return "☁"
+    if "雪" in weather_str: return "❄"
+    if "雷" in weather_str: return "⛈"
+    if "雨" in weather_str: return "☂"
+    if "雾" in weather_str or "霾" in weather_str: return "🌫"
+    return "✧"
 
 def push_image(img, page_id):
     if str(page_id) not in ENABLED_PAGES:
@@ -154,7 +163,7 @@ def get_lunar_or_festival(y, m, d):
     except:
         return ""
 
-# --- 获取数据的逻辑 (支持切换源) ---
+# --- 获取数据的逻辑 ---
 def get_hotlist_data(source):
     titles = []
     print(f"正在从 {source} 获取数据...")
@@ -168,7 +177,6 @@ def get_hotlist_data(source):
             res = requests.get(url, headers=HEADERS, timeout=10).json()
             titles = [item['show_name'] for item in res['data']['trending']['list']]
         elif source == "github":
-            # GitHub 今日最热门仓库（近7天星标最多）
             date_str = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
             url = f"https://api.github.com/search/repositories?q=stars:>500+created:>{date_str}&sort=stars&order=desc"
             res = requests.get(url, headers=HEADERS, timeout=10).json()
@@ -180,7 +188,6 @@ def get_hotlist_data(source):
         titles = ["数据获取失败，请检查配置"] * 10
     return titles[:20]
 
-
 # --- 任务：热搜看板 ---
 def task_hotlist():
     if "1" not in ENABLED_PAGES and "2" not in ENABLED_PAGES:
@@ -190,13 +197,11 @@ def task_hotlist():
     titles = get_hotlist_data(HOTLIST_SOURCE)
     title_display = source_map.get(HOTLIST_SOURCE, "热门看板")
 
-    # 🌟 核心优化：按像素真实宽度计算换行，解决中英文混排留白问题
     def wrap_text_by_pixels(draw, text, font, max_width):
         lines = []
         current_line = ""
         for char in text:
             test_line = current_line + char
-            # 测量加上这个字符后的真实像素宽度
             try:
                 w = draw.textlength(test_line, font=font)
             except AttributeError:
@@ -216,11 +221,10 @@ def task_hotlist():
         draw.text((20, 15), page_title, font=font_title, fill=255)
         
         y, last_idx = 55, start_idx
-        item_gap = 12       # 条目间距
-        line_height = 23    # 18号字的行高
+        item_gap = 12       
+        line_height = 23    
         
         for i in range(start_idx, len(items)):
-            # 屏幕总宽400，文字从X=45开始，右边留白15，所以最大像素宽度是 340
             lines = wrap_text_by_pixels(draw, items[i], font_item, max_width=340) 
             
             required_h = len(lines) * line_height
@@ -228,8 +232,6 @@ def task_hotlist():
                 break
             
             current_num = i + 1
-            
-            # 左侧黑底数字序号框 (适配 18 号字)
             draw.rounded_rectangle([(10, y), (36, y+24)], radius=6, fill=0)
             num_x = 18 if current_num < 10 else 11
             draw.text((num_x, y+3), str(current_num), font=font_small, fill=255)
@@ -242,7 +244,6 @@ def task_hotlist():
             y += max(24, required_h) + item_gap
             last_idx = i + 1
             
-            # 画分割线
             if y < 290:
                 draw.line([(45, y - item_gap/2), (380, y - item_gap/2)], fill=0, width=1)
                 
@@ -262,7 +263,7 @@ def task_hotlist():
         draw_list(ImageDraw.Draw(img2), f"◆ {title_display} (二)", titles, start_index)
         push_image(img2, 2)
 
-# --- 任务：日历（保持不变） ---
+# --- 任务：日历 ---
 def task_calendar():
     if "3" not in ENABLED_PAGES: return
     print("生成 Page 3: 日历...")
@@ -314,7 +315,6 @@ def get_hybrid_weather():
         print("⚠️ 未设置 AMAP_WEATHER_KEY，无法获取高德数据")
         return result
 
-    # 1. 高德实时与体感温度科学计算
     try:
         base_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={CITY_ADCODE}&key={AMAP_KEY}&extensions=base"
         base_resp = requests.get(base_url, timeout=10).json()
@@ -329,17 +329,12 @@ def get_hybrid_weather():
             wind_power = wind_num.group(0) if wind_num else "0"
             result["wind_info"] = f"{wind_power}级 {wind_direction}"
             
-            # 使用澳大利亚 BOM 体感温度经验公式 (AT) 优化
             try:
                 t = result["temp_curr"]
                 h = int(live.get("humidity", 50))
                 wind_speed_level = int(wind_power)
-                # 近似风速 m/s 转换
                 v = wind_speed_level * 1.5 
-                
-                # 水汽压 e
                 e = (h / 100.0) * 6.105 * math.exp((17.27 * t) / (237.7 + t))
-                # 体感温度公式
                 feel_temp = t + 0.33 * e - 0.70 * v - 4.00
                 result["feel_temp"] = f"{round(feel_temp, 1)}°C"
             except:
@@ -347,7 +342,6 @@ def get_hybrid_weather():
     except Exception as e:
         print(f"❌ 高德实时请求异常: {e}")
 
-    # 2. 高德预报 (修改为获取三天: 1, 2, 3)
     try:
         all_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={CITY_ADCODE}&key={AMAP_KEY}&extensions=all"
         all_resp = requests.get(all_url, timeout=10).json()
@@ -356,7 +350,6 @@ def get_hybrid_weather():
             if len(casts) >= 1:
                 result["temp_low"] = int(casts[0].get("nighttemp", 0))
                 result["temp_high"] = int(casts[0].get("daytemp", 0))
-            # 提取明、后、大后天
             for idx in [1, 2, 3]:
                 if idx < len(casts):
                     day = casts[idx]
@@ -369,7 +362,6 @@ def get_hybrid_weather():
     except Exception as e:
         print(f"❌ 高德预报请求异常: {e}")
 
-    # 3. wttr.in 日出日落
     try:
         wttr_url = f"https://wttr.in/{WTTR_LOCATION}?format=j1&lang=zh"
         wttr_resp = requests.get(wttr_url, timeout=15).json()
@@ -394,13 +386,13 @@ def task_weather_dashboard():
         push_image(img, 4)
         return
 
-    # 🔧动态计算日文曜日日期替换原名称
+    # 🔧修改点 1：补回天宁区，用分隔符隔开，并缩小字号（18号字 font_item）
     now_beijing = datetime.utcnow() + timedelta(hours=8)
     youbi_list = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
     youbi = youbi_list[now_beijing.weekday()]
-    date_display = f"{now_beijing.month}月{now_beijing.day}日 {youbi}"
+    date_display = f"天宁区 | {now_beijing.month}月{now_beijing.day}日 {youbi}"
     
-    draw.text((20, 10), date_display, font=font_title, fill=0)
+    draw.text((20, 15), date_display, font=font_item, fill=0)
     
     update_time = now_beijing.strftime("%I:%M %p")
     time_text = f"更新: {update_time}"
@@ -411,14 +403,34 @@ def task_weather_dashboard():
         time_width = len(time_text) * 8
     draw.text((390 - time_width, 12), time_text, font=font_small, fill=0)
 
-    draw.text((25, 40), f"{weather['temp_curr']}°C", font=font_48, fill=0)
-    draw.text((25, 100), f"{weather['temp_low']}°/{weather['temp_high']}°", font=font_item, fill=0)
-    draw.text((150, 45), f"{weather['weather']}", font=font_36, fill=0)
+    # 🔧修改点 2 & 3：温度位置对调，并统一大字号 (最高低放上面，实时温度放下面并横向排布)
+    draw.text((25, 45), f"{weather['temp_low']}°/{weather['temp_high']}°", font=font_title, fill=0)
+    
+    curr_temp_str = f"{weather['temp_curr']}°C"
+    draw.text((25, 75), curr_temp_str, font=font_48, fill=0)
+    
+    # 动态计算温度文本宽度，以此向右排布天气和图标
+    try:
+        temp_w = draw.textlength(curr_temp_str, font=font_48)
+    except AttributeError:
+        temp_w = draw.textbbox((0, 0), curr_temp_str, font=font_48)[2] - draw.textbbox((0, 0), curr_temp_str, font=font_48)[0]
+    
+    wx_x = 25 + temp_w + 10
+    draw.text((wx_x, 75), weather['weather'], font=font_48, fill=0)
+    
+    # 🔧修改点 4：实时天气后方加入动态图标
+    try:
+        wx_w = draw.textlength(weather['weather'], font=font_48)
+    except AttributeError:
+        wx_w = draw.textbbox((0, 0), weather['weather'], font=font_48)[2] - draw.textbbox((0, 0), weather['weather'], font=font_48)[0]
+        
+    icon_x = wx_x + wx_w + 10
+    current_icon = get_weather_icon(weather['weather'])
+    draw.text((icon_x, 75), current_icon, font=font_48, fill=0)
 
-    # 🔧右侧黑框缩小，向右移以更紧凑。从 235 缩至 260，右边界 385 保持不变
+    # 侧边黑框（原位置不动）
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
     
-    # 🔧黑框内部文字向右移（x轴统一为270）
     draw.text((270, 56), f"{weather['wind_info']}风", font=font_small, fill=255)
     draw.text((270, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
     draw.text((270, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
@@ -427,20 +439,24 @@ def task_weather_dashboard():
 
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
-    # 🔧增加第三天，横向分成 3 等份排版：X坐标分别设为 20, 145, 270
+    # 🔧修改点 5：未来天气也加入对应的图标
     x_positions = [20, 145, 270]
     for i, day in enumerate(weather['forecasts'][:3]):
         if i < len(x_positions):
             x = x_positions[i]
             draw.text((x, 175), day["date"], font=font_item, fill=0)
-            draw.text((x, 200), day["weather"], font=font_item, fill=0)
+            
+            # 将图标附加在文本后面
+            wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
+            draw.text((x, 200), wx_str, font=font_item, fill=0)
+            
             draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
     advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
     draw.line([(20, 250), (380, 250)], fill=0, width=1)
     advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]
     for i, line in enumerate(advice_lines[:2]):
-        draw.text((20, 262 + i*24), f"[衣] {line}", font=font_item, fill=0)
+        draw.text((20, 262 + i*24), f"[穿衣建议] {line}", font=font_item, fill=0)
 
     push_image(img, 4)
 
@@ -451,12 +467,7 @@ if __name__ == "__main__":
         exit(1)
         
     print("🚀 开始执行墨水屏推送任务...")
-    
-    # 执行热搜任务
     task_hotlist()
-    # 执行日历任务
     task_calendar()
-    # 执行天气任务
     task_weather_dashboard()
-        
     print("🎉 所有任务执行完毕！")
