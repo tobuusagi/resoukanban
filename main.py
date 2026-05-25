@@ -99,7 +99,7 @@ def get_weather_icon(weather_str):
     if "雾" in weather_str or "霾" in weather_str: return "🌫"
     return "✧"
 
-# 🌟 优化：多设备推送逻辑
+# 🌟 多设备推送逻辑
 def push_image(img, page_id):
     if str(page_id) not in ENABLED_PAGES:
         print(f"⏩ Page {page_id} 未启用，跳过推送。")
@@ -114,13 +114,32 @@ def push_image(img, page_id):
     for mac in TARGET_DEVICES:
         push_url = f"https://cloud.zectrix.com/open/v1/devices/{mac}/display/image"
         try:
-            # 使用 with open 确保每次请求都重新读取文件，避免文件指针错误
             with open(img_path, "rb") as f:
                 files = {"images": (img_path, f, "image/png")}
                 res = requests.post(push_url, headers=api_headers, files=files, data=data)
                 print(f"✅ 设备 [{mac}] Page {page_id} 推送成功: {res.status_code}")
         except Exception as e:
             print(f"❌ 设备 [{mac}] Page {page_id} 推送失败: {e}")
+
+# --- 工具函数：利用现有像素宽度限制防止文本超出黑框 ---
+def wrap_text_by_pixels(draw, text, font, max_width):
+    lines = []
+    current_line = ""
+    for char in text:
+        test_line = current_line + char
+        try:
+            w = draw.textlength(test_line, font=font)
+        except AttributeError:
+            w = draw.textbbox((0,0), test_line, font=font)[2]
+            
+        if w <= max_width:
+            current_line = test_line
+        else:
+            lines.append(current_line)
+            current_line = char
+    if current_line:
+        lines.append(current_line)
+    return lines
 
 # --- 节气与农历 ---
 def get_solar_term(year, month, day):
@@ -199,6 +218,23 @@ def get_hotlist_data(source):
         titles = ["数据获取失败，请检查配置"] * 10
     return titles[:20]
 
+# 🌟 新增获取日程的代码
+def get_todo_data():
+    """从 Zectrix 服务端获取未完成的日程列表"""
+    if not API_KEY or not TARGET_DEVICES:
+        return []
+    try:
+        url = "https://cloud.zectrix.com/open/v1/todos"
+        # 默认使用第一个设备拉取日程数据
+        params = {"status": 0, "deviceId": TARGET_DEVICES[0]}
+        headers = {"X-API-Key": API_KEY}
+        res = requests.get(url, headers=headers, params=params, timeout=10).json()
+        if res.get("code") == 0:
+            return res.get("data", [])
+    except Exception as e:
+        print(f"❌ 获取未完成日程失败: {e}")
+    return []
+
 # --- 任务：热搜看板 ---
 def task_hotlist():
     if "1" not in ENABLED_PAGES and "2" not in ENABLED_PAGES:
@@ -207,25 +243,6 @@ def task_hotlist():
     source_map = {"zhihu": "知乎热榜", "bilibili": "B站热搜", "github": "GitHub 热门"}
     titles = get_hotlist_data(HOTLIST_SOURCE)
     title_display = source_map.get(HOTLIST_SOURCE, "热门看板")
-
-    def wrap_text_by_pixels(draw, text, font, max_width):
-        lines = []
-        current_line = ""
-        for char in text:
-            test_line = current_line + char
-            try:
-                w = draw.textlength(test_line, font=font)
-            except AttributeError:
-                w = draw.textbbox((0,0), test_line, font=font)[2]
-                
-            if w <= max_width:
-                current_line = test_line
-            else:
-                lines.append(current_line)
-                current_line = char
-        if current_line:
-            lines.append(current_line)
-        return lines
 
     def draw_list(draw, page_title, items, start_idx):
         draw.rounded_rectangle([(10, 10), (390, 45)], radius=8, fill=0)
@@ -443,17 +460,50 @@ def task_weather_dashboard():
 
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
+    # 🌟 新增日程逻辑处理开始
+    if now_beijing.hour >= 23:
+        target_date = (now_beijing + timedelta(days=1)).strftime("%Y-%m-%d")
+    else:
+        target_date = now_beijing.strftime("%Y-%m-%d")
+        
+    all_todos = get_todo_data()
+    target_todos = [t for t in all_todos if t.get("dueDate") == target_date]
+    target_todos.sort(key=lambda x: x.get("dueTime", ""))
+    display_todos = target_todos[:3]  # 截取最近的3条进行显示
+    
     # 未来三天天气栏
     x_positions = [20, 145, 270]
     for i, day in enumerate(weather['forecasts'][:3]):
         if i < len(x_positions):
             x = x_positions[i]
+            
+            # 当渲染至第3个位置（大后天）且存在未完成的日程时，将这块区域替换为悬浮窗日程展示
+            if i == 2 and display_todos:
+                # 覆盖一个和上方湿度框一致的黑色背景框
+                draw.rounded_rectangle([(260, 165), (385, 245)], radius=8, outline=0, fill=0)
+                
+                todo_y = 172
+                for todo in display_todos:
+                    # 去除前缀，提取干净的标题和时间
+                    title_clean = todo.get("title", "").replace("[日历]", "").strip()
+                    time_str = todo.get("dueTime", "")
+                    display_text = f"{time_str} {title_clean}"
+                    
+                    # 限制文本长度，防止超出黑框范围
+                    lines = wrap_text_by_pixels(draw, display_text, font_tiny, max_width=115)
+                    if lines:
+                        draw.text((268, todo_y), lines[0], font=font_tiny, fill=255)
+                    todo_y += 24
+                continue  # 跳过绘制下方的大后天天气数据
+
+            # 正常天气展示逻辑（无日程或前两天）
             draw.text((x, 175), day["date"], font=font_item, fill=0)
             
             wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
             draw.text((x, 200), wx_str, font=font_item, fill=0)
             
             draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+    # 🌟 新增日程逻辑处理结束
 
     advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
     draw.line([(20, 250), (380, 250)], fill=0, width=1)
