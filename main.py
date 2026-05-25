@@ -30,11 +30,15 @@ WTTR_LOCATION = "Tianning,Changzhou"
 # 🔒 第二部分：核心密钥区（⚠️绝对不要改这里，请在 GitHub Secrets 里配置） 🔒
 # =====================================================================
 API_KEY = os.environ.get("ZECTRIX_API_KEY")
-MAC_ADDRESS = os.environ.get("ZECTRIX_MAC")
 AMAP_KEY = os.environ.get("AMAP_WEATHER_KEY")
 
-# 接口地址（自动拼接）
-PUSH_URL = f"https://cloud.zectrix.com/open/v1/devices/{MAC_ADDRESS}/display/image"
+# 🌟 多设备支持：获取 Secrets 中的旧 MAC，并加入新的 MAC 地址
+ENV_MAC = os.environ.get("ZECTRIX_MAC")
+MAC_ADDRESSES = [ENV_MAC] if ENV_MAC else []
+MAC_ADDRESSES.append("DC:B4:D9:19:1C:F0")
+
+# 去重并过滤掉可能的空值，防止发送错误
+TARGET_DEVICES = list(set([m.strip() for m in MAC_ADDRESSES if m and m.strip()]))
 
 
 # =====================================================================
@@ -85,7 +89,6 @@ def get_clothing_advice(temp, humidity_str):
     except:
         return "请据体感气温调整着装。"
 
-# 🌟 文本天气图标映射函数
 def get_weather_icon(weather_str):
     if "晴" in weather_str: return "☀"
     if "多云" in weather_str: return "⛅"
@@ -96,20 +99,28 @@ def get_weather_icon(weather_str):
     if "雾" in weather_str or "霾" in weather_str: return "🌫"
     return "✧"
 
+# 🌟 优化：多设备推送逻辑
 def push_image(img, page_id):
     if str(page_id) not in ENABLED_PAGES:
         print(f"⏩ Page {page_id} 未启用，跳过推送。")
         return
         
-    img.save(f"page_{page_id}.png")
+    img_path = f"page_{page_id}.png"
+    img.save(img_path)
     api_headers = {"X-API-Key": API_KEY}
-    files = {"images": (f"page_{page_id}.png", open(f"page_{page_id}.png", "rb"), "image/png")}
     data = {"dither": "true", "pageId": str(page_id)}
-    try:
-        res = requests.post(PUSH_URL, headers=api_headers, files=files, data=data)
-        print(f"✅ Page {page_id} 推送成功: {res.status_code}")
-    except Exception as e:
-        print(f"❌ Page {page_id} 推送失败: {e}")
+    
+    # 遍历所有目标设备进行推送
+    for mac in TARGET_DEVICES:
+        push_url = f"https://cloud.zectrix.com/open/v1/devices/{mac}/display/image"
+        try:
+            # 使用 with open 确保每次请求都重新读取文件，避免文件指针错误
+            with open(img_path, "rb") as f:
+                files = {"images": (img_path, f, "image/png")}
+                res = requests.post(push_url, headers=api_headers, files=files, data=data)
+                print(f"✅ 设备 [{mac}] Page {page_id} 推送成功: {res.status_code}")
+        except Exception as e:
+            print(f"❌ 设备 [{mac}] Page {page_id} 推送失败: {e}")
 
 # --- 节气与农历 ---
 def get_solar_term(year, month, day):
@@ -392,10 +403,8 @@ def task_weather_dashboard():
     youbi = youbi_list[now_beijing.weekday()]
     date_display = f"天宁区 | {now_beijing.month}月{now_beijing.day}日 {youbi}"
     
-    # 调整天宁区起点为 x=25，与下方的气温左端对齐
     draw.text((25, 15), date_display, font=font_item, fill=0)
     
-    # 将更新时间的字号与天宁区统一（font_item），且与右侧黑色背景框边缘（x=385）右对齐
     update_time = now_beijing.strftime("%I:%M %p")
     time_text = f"更新: {update_time}"
     try:
@@ -404,28 +413,26 @@ def task_weather_dashboard():
         time_w = draw.textbbox((0, 0), time_text, font=font_item)[2] - draw.textbbox((0, 0), time_text, font=font_item)[0]
     draw.text((385 - time_w, 15), time_text, font=font_item, fill=0)
 
-    # 2. 当日最高最低气温：缩小字号至 font_item，起点为 x=25
+    # 2. 当日最高最低气温
     draw.text((25, 45), f"{weather['temp_low']}°/{weather['temp_high']}°", font=font_item, fill=0)
     
-    # 3. 实时温度：数值字号保持 font_48，但去掉“C”只保留“°”
+    # 3. 实时温度
     curr_temp_str = f"{weather['temp_curr']}°"
     draw.text((25, 75), curr_temp_str, font=font_48, fill=0)
     
-    # 动态计算温度数字宽度，以便向右排布天气文字
     try:
         temp_w = draw.textlength(curr_temp_str, font=font_48)
     except AttributeError:
         temp_w = draw.textbbox((0, 0), curr_temp_str, font=font_48)[2] - draw.textbbox((0, 0), curr_temp_str, font=font_48)[0]
     
     wx_x = 25 + temp_w + 12
-    # 当前天气文字：缩小一号至 font_36，放在 y=85 处完美配合 48 号字的基准线
     draw.text((wx_x, 85), weather['weather'], font=font_36, fill=0)
     
-    # 4. 当前天气小图标：放在当日最高最低气温后面（y=45），但横向与即时天气文字完美对齐（x=wx_x）
+    # 4. 当前天气小图标
     current_icon = get_weather_icon(weather['weather'])
     draw.text((wx_x, 45), current_icon, font=font_item, fill=0)
 
-    # 侧边右侧黑色背景框（原尺寸与位置不变）
+    # 侧边右侧黑色背景框
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
     
     draw.text((270, 56), f"{weather['wind_info']}风", font=font_small, fill=255)
@@ -443,7 +450,6 @@ def task_weather_dashboard():
             x = x_positions[i]
             draw.text((x, 175), day["date"], font=font_item, fill=0)
             
-            # 未来天气的图标附加在文本后面
             wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
             draw.text((x, 200), wx_str, font=font_item, fill=0)
             
@@ -459,11 +465,11 @@ def task_weather_dashboard():
 
 # ================= 主程序 =================
 if __name__ == "__main__":
-    if not API_KEY or not MAC_ADDRESS:
-        print("❌ 错误: 请先在 GitHub Secrets 中配置 ZECTRIX_API_KEY 和 ZECTRIX_MAC")
+    if not API_KEY or not TARGET_DEVICES:
+        print("❌ 错误: 请检查 API Key 和设备 MAC 地址是否配置正确")
         exit(1)
         
-    print("🚀 开始执行墨水屏推送任务...")
+    print(f"🚀 开始向 {len(TARGET_DEVICES)} 个设备执行墨水屏推送任务...")
     task_hotlist()
     task_calendar()
     task_weather_dashboard()
