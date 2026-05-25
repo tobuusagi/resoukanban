@@ -42,7 +42,7 @@ TARGET_DEVICES = list(set([m.strip() for m in MAC_ADDRESSES if m and m.strip()])
 
 
 # =====================================================================
-# ⚙️ 第三部分：底层运行 logic（如果没有报错，不需要修改以下代码） ⚙️
+# ⚙️ 第三部分：底层运行逻辑（如果没有报错，不需要修改以下代码） ⚙️
 # =====================================================================
 
 # --- 字体设置 ---
@@ -99,24 +99,22 @@ def get_weather_icon(weather_str):
     if "雾" in weather_str or "霾" in weather_str: return "🌫"
     return "✧"
 
-
-# 📢【新添加的代码段 ①】：像素级右端单行截断工具函数
+# 🛠️ 新增函数 1：根据像素宽度在右端强行截断文本，绝不溢出或折行
 def truncate_text_by_pixels(draw, text, font, max_width):
-    """根据像素宽度直接截断文本，防止超出黑框"""
+    """根据指定的像素宽度，在右端直接切断文本"""
     current_line = ""
     for char in text:
         test_line = current_line + char
         try:
             w = draw.textlength(test_line, font=font)
         except AttributeError:
-            w = draw.textbbox((0,0), test_line, font=font)[2]
+            w = draw.textbbox((0, 0), test_line, font=font)[2] - draw.textbbox((0, 0), test_line, font=font)[0]
             
         if w <= max_width:
             current_line = test_line
         else:
-            return current_line  # 超过宽度直接返回当前截断结果
+            break  # 一旦超过最大允许宽度，立即终止并截断
     return current_line
-
 
 # 🌟 优化：多设备推送逻辑
 def push_image(img, page_id):
@@ -185,7 +183,7 @@ def get_lunar_or_festival(y, m, d):
         if (lm, ld) in lunar_fests: return lunar_fests[(lm, ld)]
         days = ["初一","初二","初三","初四","初五","初六","初七","初八","初九","初十",
                 "十一","十二","十三","十四","十五","十六","十七","十八","十九","二十",
-                "廿一","廿二","廿三","廿四","廿五","廿六","廿七","廿八","廿九","三十"]
+                "廿一","廿二","廿三","廿外","廿五","廿六","廿七","廿八","廿九","三十"]
         months = ["正月","二月","三月","四月","五月","六月","七月","八月","九月","十月","冬月","腊月"]
         if ld == 1: return months[lm-1]
         return days[ld-1]
@@ -217,24 +215,22 @@ def get_hotlist_data(source):
         titles = ["数据获取失败，请检查配置"] * 10
     return titles[:20]
 
-
-# 📢【新添加的代码段 ②】：兼顾多设备的日程拉取 API 函数
+# 🛠️ 新增函数 2：从云端拉取未完成的日程列表
 def get_todo_data():
-    """从 Zectrix 服务端获取未完成的日程列表"""
+    """从 Zectrix 服务端获取未完成的日程数据"""
     if not API_KEY or not TARGET_DEVICES:
         return []
     try:
         url = "https://cloud.zectrix.com/open/v1/todos"
-        # 适配多设备：默认取第一个设备绑定的账号日程数据进行公用渲染
+        # 多设备公用：默认取列表中第一个可用设备的绑定的账号日程
         params = {"status": 0, "deviceId": TARGET_DEVICES[0]}
         headers = {"X-API-Key": API_KEY}
         res = requests.get(url, headers=headers, params=params, timeout=10).json()
         if res.get("code") == 0:
             return res.get("data", [])
     except Exception as e:
-        print(f"❌ 获取未完成日程失败: {e}")
+        print(f"❌ 获取云端日程失败: {e}")
     return []
-
 
 # --- 任务：热搜看板 ---
 def task_hotlist():
@@ -430,7 +426,7 @@ def task_weather_dashboard():
 
     weather = get_hybrid_weather()
     if weather["temp_curr"] == 0 and not weather["forecasts"]:
-        draw.text((20, 50), "天气数据获取失败，请检查 API Key 或 network", font=font_item, fill=0)
+        draw.text((20, 50), "天气数据获取失败，请检查 API Key 或网络", font=font_item, fill=0)
         push_image(img, 4)
         return
 
@@ -480,8 +476,7 @@ def task_weather_dashboard():
 
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
-    
-    # 📢【新添加的代码段 ③】：日程数据筛选与渲染覆盖逻辑
+    # 🛠️ 核心：筛选当天或明天的日程数据
     if now_beijing.hour >= 23:
         target_date = (now_beijing + timedelta(days=1)).strftime("%Y-%m-%d")
     else:
@@ -490,37 +485,35 @@ def task_weather_dashboard():
     all_todos = get_todo_data()
     target_todos = [t for t in all_todos if t.get("dueDate") == target_date]
     target_todos.sort(key=lambda x: x.get("dueTime", ""))
-    display_todos = target_todos[:3]  # 截取最多3条
+    display_todos = target_todos[:3]  # 最多拉取展示3条
     
-    # 未来三天天气栏
+    # 未来三天天气栏（当有日程数据时，第三个位置将被日程框覆盖拦截）
     x_positions = [20, 145, 270]
     for i, day in enumerate(weather['forecasts'][:3]):
         if i < len(x_positions):
             x = x_positions[i]
             
-            # 当有日程数据需要展示，且循环轮询到第3个位置（大后天天气位置）时，触发日程窗拦截覆盖
+            # 🛠️ 拦截：当有日程时，隐藏原本第3列的天气，改画日程黑框
             if i == 2 and display_todos:
                 # 绘制日程专用黑框
                 draw.rounded_rectangle([(260, 165), (385, 245)], radius=8, outline=0, fill=0)
                 
-                todo_y = 170
+                todo_y = 171
                 for todo in display_todos:
-                    # 去除日历前缀
                     title_clean = todo.get("title", "").replace("[日历]", "").strip()
                     time_str = todo.get("dueTime", "")
-                    display_text = f"{time_str} {title_clean}"
+                    display_text = f"{time_str} {title_clean}".strip()
                     
-                    # 强行截断，字号采用 font_small（和湿度完全一致，14px）
+                    # 强行用像素宽度截断文本，黑框有效可用总宽112像素，字号精准对齐湿度使用 font_small
                     truncated_line = truncate_text_by_pixels(draw, display_text, font_small, max_width=112)
                     draw.text((268, todo_y), truncated_line, font=font_small, fill=255)
                     todo_y += 24
-                continue  # 跳过渲染原本的大后天天气图标和文字
+                continue  # 跳过渲染当前槽位的天气，完成覆盖操作
                 
             draw.text((x, 175), day["date"], font=font_item, fill=0)
             wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
             draw.text((x, 200), wx_str, font=font_item, fill=0)
             draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
-
 
     advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
     draw.line([(20, 250), (380, 250)], fill=0, width=1)
