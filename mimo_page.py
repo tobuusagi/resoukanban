@@ -79,7 +79,7 @@ def get_coordinates(address, key):
     return None
 
 def get_traffic_info(origin_name, dest_name, key):
-    """高德路径规划获取实时通勤路况"""
+    """高德路径规划获取实时通勤路况（仅在早间模式被调用）"""
     if not key:
         return "未配置高德Key，路况不可用。"
     o_coor = get_coordinates(origin_name, key)
@@ -151,7 +151,7 @@ def call_mimo_llm(prompt_content):
         "messages": [
             {
                 "role": "system", 
-                "content": "你是一个极其贴心的智能出行秘书。请将提供的位置、天气、温湿度、日程、路况等原始数据，智能加工整合成一份适合在400x300像素墨水屏上展示的纯文本日报。字数必须极其精炼（130字以内），不要包含Markdown格式（严禁使用**加粗**或代码块），必须多用换行符换行，每行以简洁恰当的表情符号（如☀️, 👕, 🚗, 📅）开头。你需要根据我给出的温度和湿度，智能为我构思一句精准实用的穿衣/备衣建议融入日报中。直接输出最终排版文本。"
+                "content": "你是一个极其贴心的智能出行秘书。请将提供的位置、天气、温湿度、日程、路况（若有）等原始数据，智能加工整合成一份适合在400x300像素墨水屏上展示的纯文本日报。字数必须极其精炼（130字以内），不要包含Markdown格式（严禁使用**加粗**或代码块），必须多用换行符换行，每行以简洁恰当的表情符号（如☀️, 👕, 🚗, 📅）开头。你需要根据我给出的温度和湿度，智能为我构思一句精准实用的穿衣/备衣建议融入日报中。直接输出最终排版文本。"
             },
             {"role": "user", "content": prompt_content}
         ],
@@ -209,11 +209,9 @@ def push_page_5(final_text, title_tag):
     draw.rounded_rectangle([(10, 10), (390, 45)], radius=6, fill=0)
     draw.text((20, 16), title_tag, font=font_title, fill=255)
     
-    # 核心：使用 font_title 渲染内容，max_width 保持 365 像素
     lines = wrap_text_by_pixels(draw, final_text, font_title, max_width=365)
     y_cursor = 60
     
-    # 字号增大后，行距调整为 28px，最大容纳约 8 行
     for line in lines[:8]:  
         draw.text((15, y_cursor), line, font=font_title, fill=0)
         y_cursor += 28
@@ -272,7 +270,6 @@ def main():
         traffic_str = "今日豁免路况" if skip_traffic else get_traffic_info(ADDR_HOME, ADDR_SCHOOL, AMAP_KEY)
         todo_str = "、".join([t.get("title", "") for t in todos_today]) if todos_today else "暂无计划"
         
-        # 💡 [数据整包灌注]：不提供现成逻辑建议，将温湿度原始指标交给 AI 自行判断
         raw_prompt = (
             f"位置：{'书香世家' if target_adcode==ADCODE_XINBEI else '田家炳高级中学'}\n"
             f"实时天气：{weather['weather']}\n"
@@ -288,24 +285,22 @@ def main():
         push_page_5(final_report, f"◆ 晨间智能早报 ({now_bj.strftime('%H:%M')})")
         
     elif mode == "evening":
+        # 🌟 优化：晚间彻底不查询、不打包路况数据
         is_tomorrow_holiday = check_holiday_api(tomorrow_str) or (len(todos_tomorrow) == 0)
         has_tomorrow_work = any(any(kw in str(t.get("title", "")) for kw in work_keywords) for t in todos_tomorrow)
         
-        skip_traffic = duty_today or ( (check_holiday_api(today_str) or len(todos_today)==0) and not any(any(kw in str(t.get("title", "")) for kw in work_keywords) for t in todos_today) )
         tomorrow_adcode = ADCODE_XINBEI if (is_tomorrow_holiday and not has_tomorrow_work) else ADCODE_TIANNING
         
         weather_tomorrow = get_hybrid_weather(tomorrow_adcode)
-        traffic_str = "假期或留校豁免路况" if skip_traffic else get_traffic_info(ADDR_SCHOOL, ADDR_HOME, AMAP_KEY)
         todo_str = "、".join([t.get("title", "") for t in todos_tomorrow]) if todos_tomorrow else "明日暂无安排"
         
-        # 💡 [数据整包灌注]：同上，将明日指标喂给 AI 自行产生备衣策略
+        # 移除了原有的交通路况打包
         raw_prompt = (
             f"明日位置：{'书香世家' if tomorrow_adcode==ADCODE_XINBEI else '田家炳高级中学'}\n"
             f"明日天气：{weather_tomorrow['weather']}\n"
             f"温度区间：{weather_tomorrow['temp_low']}°C ~ {weather_tomorrow['temp_high']}°C\n"
             f"空气湿度：{weather_tomorrow['humidity']}\n"
-            f"明日日程：{todo_str}\n"
-            f"今晚路况：{traffic_str}"
+            f"明日日程：{todo_str}"
         )
         
         print("💡 正在提交 MiMo 模型智能构建晚报(含动态备衣策略)...")
