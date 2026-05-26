@@ -477,12 +477,14 @@ def task_weather_dashboard():
 
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
-    # 🛠️ 修复核心 2：时间窗口精细化日程过滤逻辑
+    # 时区窗口精细化日程过滤逻辑
     all_todos = get_todo_data()
     today_str = now_beijing.strftime("%Y-%m-%d")
     
     # 核心判断：是否已经过了晚上 10:30 (22:30)
-    if now_beijing.hour > 22 or (now_beijing.hour == 22 and now_beijing.minute >= 30):
+    is_after_1030 = now_beijing.hour > 22 or (now_beijing.hour == 22 and now_beijing.minute >= 30)
+    
+    if is_after_1030:
         target_date_str = (now_beijing + timedelta(days=1)).strftime("%Y-%m-%d")
         print(f"⏰ 当前时间已过 22:30，切换过滤明日日程: {target_date_str}")
     else:
@@ -493,7 +495,9 @@ def task_weather_dashboard():
     target_todos = [t for t in all_todos if t.get("dueDate") == target_date_str]
     target_todos = [t for t in target_todos if t.get("status") in [0, "0", None]]
     target_todos.sort(key=lambda x: x.get("dueTime", ""))
-    display_todos = target_todos[:3]
+    
+    # 🚀 根据时段限制条数：10:30之后（明日日程）限制2条，10:30之前（今日日程）维持3条
+    display_todos = target_todos[:2] if is_after_1030 else target_todos[:3]
     
     print(f"ℹ️ DEBUG - 过滤排序后准备上屏显示的日程条数: {len(display_todos)}")
 
@@ -513,6 +517,12 @@ def task_weather_dashboard():
         draw.rounded_rectangle([(260, 165), (385, 245)], radius=8, outline=0, fill=0)
         
         todo_y = 171
+        
+        # 🚀 10:30 之后如果是显示明日日程，在最上方插入一行字号相同的『明日：』提示
+        if is_after_1030:
+            draw.text((268, todo_y), "『明日：』", font=font_small, fill=255)
+            todo_y += 24
+            
         for todo in display_todos:
             title_clean = todo.get("title", "").replace("[日历]", "").strip()
             time_str = todo.get("dueTime", "")
