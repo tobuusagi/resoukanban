@@ -520,7 +520,7 @@ def task_weather_dashboard():
         
         # 🚀 10:30 之后如果是显示明日日程，在最上方插入一行字号相同的『明日：』提示
         if is_after_1030:
-            draw.text((268, todo_y), "『明日：』", font=font_small, fill=255)
+            draw.text((268, todo_y), "明日：", font=font_small, fill=255)
             todo_y += 24
             
         for todo in display_todos:
