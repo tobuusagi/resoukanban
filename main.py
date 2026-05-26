@@ -215,7 +215,7 @@ def get_hotlist_data(source):
     return titles[:20]
 
 def get_todo_data():
-    """从云端获取全量日程列表"""
+    """从云端获取全量日程列表并进行去重"""
     if not API_KEY:
         return []
     try:
@@ -225,10 +225,26 @@ def get_todo_data():
         
         print(f"📊 DEBUG - 云端日程接口原始返回类型: {type(res)}")
         
+        raw_todos = []
         if isinstance(res, list):
-            return res
-        if isinstance(res, dict):
-            return res.get("data", []) or res.get("todos", [])
+            raw_todos = res
+        elif isinstance(res, dict):
+            raw_todos = res.get("data", []) or res.get("todos", []) or []
+            
+        # 🌟 核心修改：针对多设备同步导致的日程重复问题进行精准过滤
+        seen = set()
+        deduped_todos = []
+        for todo in raw_todos:
+            if isinstance(todo, dict):
+                # 提取标题、截止日期、截止时间作为判断唯一日程的特征锁
+                todo_key = (todo.get("title"), todo.get("dueDate"), todo.get("dueTime"))
+                if todo_key not in seen:
+                    seen.add(todo_key)
+                    deduped_todos.append(todo)
+                    
+        print(f"🔄 日程过滤完成: 原始数据 {len(raw_todos)} 条 -> 去重后剩余 {len(deduped_todos)} 条")
+        return deduped_todos
+        
     except Exception as e:
         print(f"❌ 获取云端日程发生网络异常: {e}")
     return []
