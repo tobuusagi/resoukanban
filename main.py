@@ -32,13 +32,12 @@ WTTR_LOCATION = "Tianning,Changzhou"
 API_KEY = os.environ.get("ZECTRIX_API_KEY")
 AMAP_KEY = os.environ.get("AMAP_WEATHER_KEY")
 
-# 🌟 多设备支持：获取 Secrets 中的旧 MAC，并加入新的 MAC 地址
-ENV_MAC = os.environ.get("ZECTRIX_MAC")
-MAC_ADDRESSES = [ENV_MAC] if ENV_MAC else []
-MAC_ADDRESSES.append("DC:B4:D9:19:1C:F0")
+# 🌟 多设备支持：从单个 Secret 中读取逗号分隔的多个 MAC 地址，彻底解决泄露风险
+ENV_MAC = os.environ.get("ZECTRIX_MAC", "")
 
-# 去重并过滤掉可能的空值，防止发送错误
-TARGET_DEVICES = list(set([m.strip() for m in MAC_ADDRESSES if m and m.strip()]))
+# 按逗号拆分、去除两端空格、过滤空值并去重
+raw_mac_list = ENV_MAC.split(',')
+TARGET_DEVICES = list(set([m.strip() for m in raw_mac_list if m and m.strip()]))
 
 
 # =====================================================================
