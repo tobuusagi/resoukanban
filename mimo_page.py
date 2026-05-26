@@ -17,11 +17,12 @@ ADCODE_XINBEI = "320411"   # 新北区（家庭所在地）
 
 API_KEY = os.environ.get("ZECTRIX_API_KEY")
 AMAP_KEY = os.environ.get("AMAP_WEATHER_KEY")
-ENV_MAC = os.environ.get("ZECTRIX_MAC")
+# 🌟 多设备支持：从单个 Secret 中读取逗号分隔的多个 MAC 地址，彻底解决泄露风险
+ENV_MAC = os.environ.get("ZECTRIX_MAC", "")
 
-MAC_ADDRESSES = [ENV_MAC] if ENV_MAC else []
-MAC_ADDRESSES.append("DC:B4:D9:19:1C:F0")
-TARGET_DEVICES = list(set([m.strip() for m in MAC_ADDRESSES if m and m.strip()]))
+# 按逗号拆分、去除两端空格、过滤空值并去重
+raw_mac_list = ENV_MAC.split(',')
+TARGET_DEVICES = list(set([m.strip() for m in raw_mac_list if m and m.strip()]))
 
 FONT_PATH = "font.ttf"
 try:
