@@ -1,49 +1,39 @@
-name: Zectrix Ink Screen Page5 Push
+name: Run Ink Screen Sync
+
+on:
+  workflow_dispatch:
+    # 🌟 1. 开启输入参数通道
+    inputs:
+      mode:
+        description: '运行模式 (morning/evening)'
+        required: false
+        default: 'auto'
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-on:
-  schedule:
-    - cron: '30 22 * * *'  # 北京时间 06:30 自动触发晨间早报
-    - cron: '0 9 * * *'    # 北京时间 17:00 自动触发晚间建议
-  workflow_dispatch:       # 允许随时在 GitHub 面板手动点击运行测试
 
 jobs:
-  build-and-push:
+  run-sync:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Repository Code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python Environment
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install Runtime Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests pillow
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests Pillow
 
-    - name: Execute Morning Routine
-      # 判定如果触发时间点处于 UTC 21点至02点 之间，或者是手动触发，带参数运行 morning
-      if: github.event_name == 'workflow_dispatch' || (matrix.mode == '' && (github.event.schedule == '30 22 * * *'))
-      env:
-        ZECTRIX_API_KEY: ${{ secrets.ZECTRIX_API_KEY }}
-        ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
-        AMAP_WEATHER_KEY: ${{ secrets.AMAP_WEATHER_KEY }}
-        MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
-        MIMO_API_URL: ${{ secrets.MIMO_API_URL || 'https://platform.xiaomimimo.com/v1/chat/completions' }}
-        MIMO_MODEL: ${{ secrets.MIMO_MODEL || 'mimo-v2.5' }}
-      run: python mimo_page.py morning
-
-    - name: Execute Evening Routine
-      if: github.event.schedule == '0 9 * * *'
-      env:
-        ZECTRIX_API_KEY: ${{ secrets.ZECTRIX_API_KEY }}
-        ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
-        AMAP_WEATHER_KEY: ${{ secrets.AMAP_WEATHER_KEY }}
-        MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
-        MIMO_API_URL: ${{ secrets.MIMO_API_URL || 'https://platform.xiaomimimo.com/v1/chat/completions' }}
-        MIMO_MODEL: ${{ secrets.MIMO_MODEL || 'mimo-v2.5' }}
-      run: python mimo_page.py evening
+      - name: Run Python Script
+        # 🌟 2. 核心修改：让 Python 动态接收来自外部传入的早/晚参数
+        run: python mimo_page.py ${{ github.event.inputs.mode }}
+        env:
+          ZECTRIX_API_KEY: ${{ secrets.ZECTRIX_API_KEY }}
+          AMAP_WEATHER_KEY: ${{ secrets.AMAP_WEATHER_KEY }}
+          ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
+          MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
