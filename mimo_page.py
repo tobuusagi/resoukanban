@@ -300,7 +300,7 @@ def main():
         
         # 💡 [数据整包灌注]：同上，将明日指标喂给 AI 自行产生备衣策略
         raw_prompt = (
-            f"明日位置：{'新北主家' if tomorrow_adcode==ADCODE_XINBEI else '天宁校区'}\n"
+            f"明日位置：{'书香世家' if tomorrow_adcode==ADCODE_XINBEI else '田家炳高级中学'}\n"
             f"明日天气：{weather_tomorrow['weather']}\n"
             f"温度区间：{weather_tomorrow['temp_low']}°C ~ {weather_tomorrow['temp_high']}°C\n"
             f"空气湿度：{weather_tomorrow['humidity']}\n"
