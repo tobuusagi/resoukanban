@@ -27,15 +27,6 @@ WTTR_LOCATION = "Tianning,Changzhou"
 
 
 # =====================================================================
-# 🛠️ 🔍 图标像素级微调配置区（针对“晴”单独做对齐）
-# =====================================================================
-# 专门针对实时天气中“晴”天大图标（白天 B 或夜间 C）的显示位置进行单独微调 (X方向偏移, Y方向偏移)
-# 正数向右/下，负数向左/上。
-# 例如：若想向上移动 3 像素，可改为 (0, -3)
-SUNNY_ICON_OFFSET = (0, 0)
-
-
-# =====================================================================
 # 🔒 第二部分：核心密钥区（⚠️绝对不要改这里，请在 GitHub Secrets 里配置） 🔒
 # =====================================================================
 API_KEY = os.environ.get("ZECTRIX_API_KEY")
@@ -54,23 +45,17 @@ TARGET_DEVICES = list(set([m.strip() for m in raw_mac_list if m and m.strip()]))
 # =====================================================================
 
 # --- 字体设置 ---
-FONT_PATH = "font.ttf"                             # 基础常规中文字体
-WEATHER_FONT_PATH = "font_weather_icon.ttf"       # 专门的天气图标字体
-
+FONT_PATH = "font.ttf"
 try:
     font_huge = ImageFont.truetype(FONT_PATH, 65)
     font_title = ImageFont.truetype(FONT_PATH, 24)
-    font_item = ImageFont.truetype(FONT_PATH, 18)       # 未来天气中文字体 (18号)
+    font_item = ImageFont.truetype(FONT_PATH, 18)
     font_small = ImageFont.truetype(FONT_PATH, 14)
     font_tiny = ImageFont.truetype(FONT_PATH, 11)
     font_48 = ImageFont.truetype(FONT_PATH, 48)
-    font_36 = ImageFont.truetype(FONT_PATH, 36)         # 实时天气中文字体 (36号)
-    
-    # 图标字体分为大、小两组
-    font_weather_icon_large = ImageFont.truetype(WEATHER_FONT_PATH, 36) # 专门匹配实时天气大字 (36号)
-    font_weather_icon_small = ImageFont.truetype(WEATHER_FONT_PATH, 18) # 专门匹配未来预报与日出日落 (18号)
-except Exception as e:
-    print(f"❌ 错误: 字体文件加载失败，请检查 font.ttf 和 font_weather_icon.ttf 是否在根目录下。{e}")
+    font_36 = ImageFont.truetype(FONT_PATH, 36)
+except:
+    print("❌ 错误: 找不到 font.ttf")
     exit(1)
 
 # 使用更通用的请求头
@@ -103,46 +88,19 @@ def get_clothing_advice(temp, humidity_str):
     except:
         return "请据体感气温调整着装。"
 
-# 图标字体专用映射函数
 def get_weather_icon(weather_str):
-    if not weather_str:
-        return "S"  
-    if "晴" in weather_str:
-        hour = (datetime.utcnow() + timedelta(hours=8)).hour
-        if 6 <= hour < 18:
-            return "B"  # 白天晴
-        else:
-            return "C"  # 夜间晴
-    if "多云" in weather_str or "少云" in weather_str or "晴间多云" in weather_str:
-        return "Y"  
-    if "阴" in weather_str:
-        return "N"  
-    if "冰雹" in weather_str:
-        return "X"  
-    if "雷" in weather_str:
-        return "O"  
-    if "大雪" in weather_str or "暴雪" in weather_str or "中雪" in weather_str:
-        return "W"  
-    if "雪" in weather_str or "阵雪" in weather_str:
-        return "U"  
-    if "阵雨" in weather_str:
-        return "T"  
-    if "大雨" in weather_str or "暴雨" in weather_str or "中雨" in weather_str:
-        return "R"  
-    if "雨" in weather_str or "毛毛雨" in weather_str or "细雨" in weather_str:
-        return "Q"  
-    if "雾" in weather_str:
-        return "L"  
-    if "霾" in weather_str or "尘" in weather_str or "扬沙" in weather_str or "沙尘" in weather_str:
-        return "M"  
-    if "大风" in weather_str or "狂风" in weather_str or "疾风" in weather_str or "飓风" in weather_str or "台风" in weather_str or "阵风" in weather_str or "飑" in weather_str:
-        return "F"  
-    if "风" in weather_str:
-        return "E"  
-    return "S"  
+    if "晴" in weather_str: return "☀"
+    if "多云" in weather_str: return "⛅"
+    if "阴" in weather_str: return "☁"
+    if "雪" in weather_str: return "❄"
+    if "雷" in weather_str: return "⛈"
+    if "雨" in weather_str: return "☂"
+    if "雾" in weather_str or "霾" in weather_str: return "🌫"
+    return "✧"
 
 # 🛠️ 像素级右端强行截断工具函数
 def truncate_text_by_pixels(draw, text, font, max_width):
+    """根据指定的像素宽度，在右端直接切断文本"""
     current_line = ""
     for char in text:
         test_line = current_line + char
@@ -154,10 +112,10 @@ def truncate_text_by_pixels(draw, text, font, max_width):
         if w <= max_width:
             current_line = test_line
         else:
-            break  
+            break  # 一旦超过最大允许宽度，立即终止并截断
     return current_line
 
-# 推送图片
+# 🌟 多设备推送逻辑
 def push_image(img, page_id):
     if str(page_id) not in ENABLED_PAGES:
         print(f"⏩ Page {page_id} 未启用，跳过推送。")
@@ -277,9 +235,10 @@ def get_todo_data():
                 if todo_key not in seen:
                     seen.add(todo_key)
                     deduped_todos.append(todo)
+                    
         return deduped_todos
     except Exception as e:
-        print(f"❌ 获取云端日程异常: {e}")
+        print(f"❌ 获取云端日程发生网络异常: {e}")
     return []
 
 # --- 任务：热搜看板 ---
@@ -406,7 +365,7 @@ def get_hybrid_weather():
     }
     
     if not AMAP_KEY:
-        print("⚠️ 未设置 AMAP_WEATHER_KEY")
+        print("⚠️ 未设置 AMAP_WEATHER_KEY，无法获取高德数据")
         return result
 
     try:
@@ -476,7 +435,7 @@ def task_weather_dashboard():
 
     weather = get_hybrid_weather()
     if weather["temp_curr"] == 0 and not weather["forecasts"]:
-        draw.text((20, 50), "天气数据获取失败", font=font_item, fill=0)
+        draw.text((20, 50), "天气数据获取失败，请检查 API Key 或 network", font=font_item, fill=0)
         push_image(img, 4)
         return
 
@@ -509,47 +468,27 @@ def task_weather_dashboard():
         temp_w = draw.textbbox((0, 0), curr_temp_str, font=font_48)[2] - draw.textbbox((0, 0), curr_temp_str, font=font_48)[0]
     
     wx_x = 25 + temp_w + 12
-    weather_text = weather['weather']
-    current_icon = get_weather_icon(weather_text)
+    draw.text((wx_x, 85), weather['weather'], font=font_36, fill=0)
     
-    try:
-        tw = draw.textlength(weather_text, font=font_36)
-    except AttributeError:
-        tw = draw.textbbox((0, 0), weather_text, font=font_36)[2] - draw.textbbox((0, 0), weather_text, font=font_36)[0]
-    
-    # 计算文字的绝对中心点
-    text_center_x = wx_x + tw / 2
-    
-    # 初始化图标中心轴线位置
-    icon_x = text_center_x
-    icon_y = 42
-    
-    # 🌟 核心对齐：如果是晴天（白天晴 B 或 夜间晴 C），则应用单独的像素级微调
-    if current_icon in ["B", "C"]:
-        icon_x += SUNNY_ICON_OFFSET[0]
-        icon_y += SUNNY_ICON_OFFSET[1]
-        
-    draw.text((wx_x, 85), weather_text, font=font_36, fill=0)
-    draw.text((icon_x, icon_y), current_icon, font=font_weather_icon_large, fill=0, anchor="ma")
+    # 4. 当前天气小图标
+    current_icon = get_weather_icon(weather['weather'])
+    draw.text((wx_x, 45), current_icon, font=font_item, fill=0)
 
     # 侧边右侧黑色背景框
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
+    
     draw.text((270, 56), f"{weather['wind_info']}风", font=font_small, fill=255)
     draw.text((270, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
     draw.text((270, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
 
-    # 🌟 日出日落图标完美回归（日落起始位置为 145，与下方后天预报完美垂直对齐）
-    draw.text((25, 144), "A", font=font_weather_icon_small, fill=0, anchor="lm")
-    draw.text((45, 144), weather['sunrise'], font=font_item, fill=0, anchor="lm")
-    
-    draw.text((145, 144), "J", font=font_weather_icon_small, fill=0, anchor="lm")
-    draw.text((165, 144), weather['sunset'], font=font_item, fill=0, anchor="lm")
-    
+    draw.text((25, 135), f"日出 {weather['sunrise']}   日落 {weather['sunset']}", font=font_item, fill=0)
+
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
-    # 日程过滤逻辑
+    # 时区窗口精细化日程过滤逻辑
     all_todos = get_todo_data()
     today_str = now_beijing.strftime("%Y-%m-%d")
+    
     is_after_1030 = now_beijing.hour > 22 or (now_beijing.hour == 22 and now_beijing.minute >= 30)
     
     if is_after_1030:
@@ -560,51 +499,26 @@ def task_weather_dashboard():
     target_todos = [t for t in all_todos if t.get("dueDate") == target_date_str]
     target_todos = [t for t in target_todos if t.get("status") in [0, "0", None]]
     target_todos.sort(key=lambda x: x.get("dueTime", ""))
+    
     display_todos = target_todos[:2] if is_after_1030 else target_todos[:3]
 
-    # 🌟 优化：未来天气（三列信息在 x=20 到 x=380 的 360px 宽度中，按等分中轴线完全居中渲染）
-    col_centers = [80, 200]
+    # 🌟 纵向行间距优化区：左对齐保持不变，统一修改 y 轴坐标，完美垂直均分于上下直线之间
+    # 渲染前两列固定天气 (今天、明天)
     for i in range(2):
         if i < len(weather['forecasts']):
             day = weather['forecasts'][i]
-            col_center = col_centers[i]
-            
-            # 1. 居中渲染日期
-            try:
-                date_w = draw.textlength(day["date"], font=font_item)
-            except AttributeError:
-                date_w = draw.textbbox((0, 0), day["date"], font=font_item)[2] - draw.textbbox((0, 0), day["date"], font=font_item)[0]
-            draw.text((col_center - date_w / 2, 175), day["date"], font=font_item, fill=0)
-            
-            # 2. 居中渲染天气文字 + 图标字符组合
-            day_weather_text = day['weather']
-            icon_char = get_weather_icon(day_weather_text)
-            try:
-                text_w = draw.textlength(day_weather_text, font=font_item)
-                icon_w = draw.textlength(icon_char, font=font_weather_icon_small)
-            except AttributeError:
-                text_w = draw.textbbox((0, 0), day_weather_text, font=font_item)[2] - draw.textbbox((0, 0), day_weather_text, font=font_item)[0]
-                icon_w = draw.textbbox((0, 0), icon_char, font=font_weather_icon_small)[2] - draw.textbbox((0, 0), icon_char, font=font_weather_icon_small)[0]
-            
-            total_w = text_w + 4 + icon_w
-            start_x = col_center - total_w / 2
-            
-            draw.text((start_x, 209), day_weather_text, font=font_item, fill=0, anchor="lm") 
-            draw.text((start_x + text_w + 4, 209), icon_char, font=font_weather_icon_small, fill=0, anchor="lm") 
-            
-            # 3. 居中渲染最高最低温范围
-            temp_str = f"{day['temp_low']}°~{day['temp_high']}°"
-            try:
-                temp_w = draw.textlength(temp_str, font=font_item)
-            except AttributeError:
-                temp_w = draw.textbbox((0, 0), temp_str, font=font_item)[2] - draw.textbbox((0, 0), temp_str, font=font_item)[0]
-            draw.text((col_center - temp_w / 2, 230), temp_str, font=font_item, fill=0)
+            x = [20, 145][i]
+            draw.text((x, 173), day["date"], font=font_item, fill=0)                       # 第一行 y=173 (原175)
+            wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
+            draw.text((x, 197), wx_str, font=font_item, fill=0)                           # 第二行 y=197 (原200)
+            draw.text((x, 221), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)  # 第三行 y=221 (原220)
 
-    # 🌟 渲染第三列 (有日程显示日程黑框，无日程自动兜底第3天预报，中心轴线设为 320)
+    # 渲染第三列 (x=270)：如果有日程，绘制黑框；如果没有，自动退回大后天天气预报
     if display_todos:
-        # 日程专用黑框，右边界完美收窄到 380 像素，实现视觉对齐
-        draw.rounded_rectangle([(260, 165), (380, 245)], radius=8, outline=0, fill=0)
+        draw.rounded_rectangle([(260, 165), (385, 245)], radius=8, outline=0, fill=0)
+        
         todo_y = 171
+        
         if is_after_1030:
             draw.text((268, todo_y), "明日：", font=font_small, fill=255)
             todo_y += 24
@@ -614,46 +528,18 @@ def task_weather_dashboard():
             time_str = todo.get("dueTime", "")
             display_text = f"{time_str} {title_clean}".strip() if time_str else title_clean
             
-            # 严格截断控制：字号绑定 font_small，可用宽度调整为 104 像素以防爆边
-            truncated_line = truncate_text_by_pixels(draw, display_text, font_small, max_width=104)
+            truncated_line = truncate_text_by_pixels(draw, display_text, font_small, max_width=112)
             draw.text((268, todo_y), truncated_line, font=font_small, fill=255)
             todo_y += 24
     else:
-        # 无日程显示的第三列预报（大后天天气预报），同样采用中心点 320 绝对居中渲染
+        # 兜底：无日程时恢复原第 3 列天气（大后天天气预报）同样应用校准后的垂直行距
         if len(weather['forecasts']) >= 3:
             day = weather['forecasts'][2]
-            col_center = 320
-            
-            # 1. 居中渲染日期
-            try:
-                date_w = draw.textlength(day["date"], font=font_item)
-            except AttributeError:
-                date_w = draw.textbbox((0, 0), day["date"], font=font_item)[2] - draw.textbbox((0, 0), day["date"], font=font_item)[0]
-            draw.text((col_center - date_w / 2, 175), day["date"], font=font_item, fill=0)
-            
-            # 2. 居中渲染天气与图标组合
-            day_weather_text = day['weather']
-            icon_char = get_weather_icon(day_weather_text)
-            try:
-                text_w = draw.textlength(day_weather_text, font=font_item)
-                icon_w = draw.textlength(icon_char, font=font_weather_icon_small)
-            except AttributeError:
-                text_w = draw.textbbox((0, 0), day_weather_text, font=font_item)[2] - draw.textbbox((0, 0), day_weather_text, font=font_item)[0]
-                icon_w = draw.textbbox((0, 0), icon_char, font=font_weather_icon_small)[2] - draw.textbbox((0, 0), icon_char, font=font_weather_icon_small)[0]
-            
-            total_w = text_w + 4 + icon_w
-            start_x = col_center - total_w / 2
-            
-            draw.text((start_x, 209), day_weather_text, font=font_item, fill=0, anchor="lm")
-            draw.text((start_x + text_w + 4, 209), icon_char, font=font_weather_icon_small, fill=0, anchor="lm")
-            
-            # 3. 居中渲染最高最低温
-            temp_str = f"{day['temp_low']}°~{day['temp_high']}°"
-            try:
-                temp_w = draw.textlength(temp_str, font=font_item)
-            except AttributeError:
-                temp_w = draw.textbbox((0, 0), temp_str, font=font_item)[2] - draw.textbbox((0, 0), temp_str, font=font_item)[0]
-            draw.text((col_center - temp_w / 2, 230), temp_str, font=font_item, fill=0)
+            x = 270
+            draw.text((x, 173), day["date"], font=font_item, fill=0)                       # 第一行 y=173 (原175)
+            wx_str = f"{day['weather']} {get_weather_icon(day['weather'])}"
+            draw.text((x, 197), wx_str, font=font_item, fill=0)                           # 第二行 y=197 (原200)
+            draw.text((x, 221), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)  # 第三行 y=221 (原220)
 
 
     advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
@@ -667,7 +553,7 @@ def task_weather_dashboard():
 # ================= 主程序 =================
 if __name__ == "__main__":
     if not API_KEY or not TARGET_DEVICES:
-        print("❌ 错误: 请检查密钥和 MAC 地址")
+        print("❌ 错误: 请检查 API Key 和设备 MAC 地址是否配置正确")
         exit(1)
         
     print(f"🚀 开始向 {len(TARGET_DEVICES)} 个设备执行墨水屏推送任务...")
