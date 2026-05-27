@@ -562,29 +562,48 @@ def task_weather_dashboard():
     target_todos.sort(key=lambda x: x.get("dueTime", ""))
     display_todos = target_todos[:2] if is_after_1030 else target_todos[:3]
 
-    # 未来预报（前两列：明天 x=20, 后天 x=145）
+    # 🌟 优化：未来天气（三列信息在 x=20 到 x=380 的 360px 宽度中，按等分中轴线完全居中渲染）
+    col_centers = [80, 200]
     for i in range(2):
         if i < len(weather['forecasts']):
             day = weather['forecasts'][i]
-            x = [20, 145][i]
-            draw.text((x, 175), day["date"], font=font_item, fill=0)
+            col_center = col_centers[i]
             
+            # 1. 居中渲染日期
+            try:
+                date_w = draw.textlength(day["date"], font=font_item)
+            except AttributeError:
+                date_w = draw.textbbox((0, 0), day["date"], font=font_item)[2] - draw.textbbox((0, 0), day["date"], font=font_item)[0]
+            draw.text((col_center - date_w / 2, 175), day["date"], font=font_item, fill=0)
+            
+            # 2. 居中渲染天气文字 + 图标字符组合
             day_weather_text = day['weather']
-            draw.text((x, 209), day_weather_text, font=font_item, fill=0, anchor="lm") 
-            
+            icon_char = get_weather_icon(day_weather_text)
             try:
                 text_w = draw.textlength(day_weather_text, font=font_item)
+                icon_w = draw.textlength(icon_char, font=font_weather_icon_small)
             except AttributeError:
                 text_w = draw.textbbox((0, 0), day_weather_text, font=font_item)[2] - draw.textbbox((0, 0), day_weather_text, font=font_item)[0]
-                
-            icon_char = get_weather_icon(day_weather_text)
-            draw.text((x + text_w + 4, 209), icon_char, font=font_weather_icon_small, fill=0, anchor="lm") 
+                icon_w = draw.textbbox((0, 0), icon_char, font=font_weather_icon_small)[2] - draw.textbbox((0, 0), icon_char, font=font_weather_icon_small)[0]
             
-            draw.text((x, 230), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+            total_w = text_w + 4 + icon_w
+            start_x = col_center - total_w / 2
+            
+            draw.text((start_x, 209), day_weather_text, font=font_item, fill=0, anchor="lm") 
+            draw.text((start_x + text_w + 4, 209), icon_char, font=font_weather_icon_small, fill=0, anchor="lm") 
+            
+            # 3. 居中渲染最高最低温范围
+            temp_str = f"{day['temp_low']}°~{day['temp_high']}°"
+            try:
+                temp_w = draw.textlength(temp_str, font=font_item)
+            except AttributeError:
+                temp_w = draw.textbbox((0, 0), temp_str, font=font_item)[2] - draw.textbbox((0, 0), temp_str, font=font_item)[0]
+            draw.text((col_center - temp_w / 2, 230), temp_str, font=font_item, fill=0)
 
-    # 渲染第三列 (x=270)
+    # 🌟 渲染第三列 (有日程显示日程黑框，无日程自动兜底第3天预报，中心轴线设为 320)
     if display_todos:
-        draw.rounded_rectangle([(260, 165), (385, 245)], radius=8, outline=0, fill=0)
+        # 日程专用黑框，右边界完美收窄到 380 像素，实现视觉对齐
+        draw.rounded_rectangle([(260, 165), (380, 245)], radius=8, outline=0, fill=0)
         todo_y = 171
         if is_after_1030:
             draw.text((268, todo_y), "明日：", font=font_small, fill=255)
@@ -595,28 +614,46 @@ def task_weather_dashboard():
             time_str = todo.get("dueTime", "")
             display_text = f"{time_str} {title_clean}".strip() if time_str else title_clean
             
-            truncated_line = truncate_text_by_pixels(draw, display_text, font_small, max_width=112)
+            # 严格截断控制：字号绑定 font_small，可用宽度调整为 104 像素以防爆边
+            truncated_line = truncate_text_by_pixels(draw, display_text, font_small, max_width=104)
             draw.text((268, todo_y), truncated_line, font=font_small, fill=255)
             todo_y += 24
     else:
-        # 无日程显示的第三列预报兜底
+        # 无日程显示的第三列预报（大后天天气预报），同样采用中心点 320 绝对居中渲染
         if len(weather['forecasts']) >= 3:
             day = weather['forecasts'][2]
-            x = 270
-            draw.text((x, 175), day["date"], font=font_item, fill=0)
+            col_center = 320
             
+            # 1. 居中渲染日期
+            try:
+                date_w = draw.textlength(day["date"], font=font_item)
+            except AttributeError:
+                date_w = draw.textbbox((0, 0), day["date"], font=font_item)[2] - draw.textbbox((0, 0), day["date"], font=font_item)[0]
+            draw.text((col_center - date_w / 2, 175), day["date"], font=font_item, fill=0)
+            
+            # 2. 居中渲染天气与图标组合
             day_weather_text = day['weather']
-            draw.text((x, 209), day_weather_text, font=font_item, fill=0, anchor="lm")
-            
+            icon_char = get_weather_icon(day_weather_text)
             try:
                 text_w = draw.textlength(day_weather_text, font=font_item)
+                icon_w = draw.textlength(icon_char, font=font_weather_icon_small)
             except AttributeError:
                 text_w = draw.textbbox((0, 0), day_weather_text, font=font_item)[2] - draw.textbbox((0, 0), day_weather_text, font=font_item)[0]
-                
-            icon_char = get_weather_icon(day_weather_text)
-            draw.text((x + text_w + 4, 209), icon_char, font=font_weather_icon_small, fill=0, anchor="lm")
+                icon_w = draw.textbbox((0, 0), icon_char, font=font_weather_icon_small)[2] - draw.textbbox((0, 0), icon_char, font=font_weather_icon_small)[0]
             
-            draw.text((x, 230), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+            total_w = text_w + 4 + icon_w
+            start_x = col_center - total_w / 2
+            
+            draw.text((start_x, 209), day_weather_text, font=font_item, fill=0, anchor="lm")
+            draw.text((start_x + text_w + 4, 209), icon_char, font=font_weather_icon_small, fill=0, anchor="lm")
+            
+            # 3. 居中渲染最高最低温
+            temp_str = f"{day['temp_low']}°~{day['temp_high']}°"
+            try:
+                temp_w = draw.textlength(temp_str, font=font_item)
+            except AttributeError:
+                temp_w = draw.textbbox((0, 0), temp_str, font=font_item)[2] - draw.textbbox((0, 0), temp_str, font=font_item)[0]
+            draw.text((col_center - temp_w / 2, 230), temp_str, font=font_item, fill=0)
 
 
     advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
