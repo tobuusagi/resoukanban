@@ -27,31 +27,12 @@ WTTR_LOCATION = "Tianning,Changzhou"
 
 
 # =====================================================================
-# 🛠️ 🔍 图标像素级微调配置区（若觉得个别大图标高低不齐，可在此微调）
+# 🛠️ 🔍 图标像素级微调配置区（针对“晴”单独做对齐）
 # =====================================================================
-# 针对实时大图标在字体内置重心不同的微调字典 (X方向偏移, Y方向偏移)
-# 正数向右/下，负数向左/上
-LARGE_ICON_OFFSETS = {
-    # 👇 保持原样不偏移的图标
-    "B": (0, 0),     # 白天晴
-    "C": (0, 0),     # 夜间晴
-    "M": (0, 0),     # 霾
-    
-    # 👇 统一向上微调 5 像素的图标
-    "Y": (0, -10),    # 多云 / 少云 / 晴间多云
-    "N": (0, -5),    # 阴天
-    "X": (0, -5),    # 冰雹
-    "O": (0, -5),    # 雷
-    "W": (0, -5),    # 大雪 / 暴雪 / 中雪
-    "U": (0, -5),    # 雪 / 阵雪
-    "T": (0, -5),    # 阵雨
-    "R": (0, -5),    # 大雨 / 暴雨 / 中雨
-    "Q": (0, -5),    # 雨 / 毛毛雨 / 细雨
-    "L": (0, -5),    # 雾
-    "F": (0, -5),    # 大风 / 狂风 / 暴风 / 台风
-    "E": (0, -5),    # 风
-    "S": (0, -5),    # 未知 / 默认兜底
-}
+# 专门针对实时天气中“晴”天大图标（白天 B 或夜间 C）的显示位置进行单独微调 (X方向偏移, Y方向偏移)
+# 正数向右/下，负数向左/上。
+# 例如：若想向上移动 3 像素，可改为 (0, -3)
+SUNNY_ICON_OFFSET = (0, 0)
 
 
 # =====================================================================
@@ -69,7 +50,7 @@ TARGET_DEVICES = list(set([m.strip() for m in raw_mac_list if m and m.strip()]))
 
 
 # =====================================================================
-# ⚙️ 第三部分：底层运行逻辑（如果没有报错，不需要修改以下 code） ⚙️
+# ⚙️ 第三部分：底层运行逻辑（如果没有报错，不需要修改以下代码） ⚙️
 # =====================================================================
 
 # --- 字体设置 ---
@@ -85,11 +66,11 @@ try:
     font_48 = ImageFont.truetype(FONT_PATH, 48)
     font_36 = ImageFont.truetype(FONT_PATH, 36)         # 实时天气中文字体 (36号)
     
-    # 将图标字体拆分为大、小两组，完美匹配文本字号
+    # 图标字体分为大、小两组
     font_weather_icon_large = ImageFont.truetype(WEATHER_FONT_PATH, 36) # 专门匹配实时天气大字 (36号)
-    font_weather_icon_small = ImageFont.truetype(WEATHER_FONT_PATH, 18) # 专门匹配未来预报小字 (18号)
+    font_weather_icon_small = ImageFont.truetype(WEATHER_FONT_PATH, 18) # 专门匹配未来预报与日出日落 (18号)
 except Exception as e:
-    print(f"❌ 错误: 字体文件加载失败，请检查 font.ttf 和 font_weather_icon.ttf 是否都在根目录下。错误详情: {e}")
+    print(f"❌ 错误: 字体文件加载失败，请检查 font.ttf 和 font_weather_icon.ttf 是否在根目录下。{e}")
     exit(1)
 
 # 使用更通用的请求头
@@ -122,16 +103,16 @@ def get_clothing_advice(temp, humidity_str):
     except:
         return "请据体感气温调整着装。"
 
-# 精简天气映射函数
+# 图标字体专用映射函数
 def get_weather_icon(weather_str):
     if not weather_str:
         return "S"  
     if "晴" in weather_str:
         hour = (datetime.utcnow() + timedelta(hours=8)).hour
         if 6 <= hour < 18:
-            return "B"  
+            return "B"  # 白天晴
         else:
-            return "C"  
+            return "C"  # 夜间晴
     if "多云" in weather_str or "少云" in weather_str or "晴间多云" in weather_str:
         return "Y"  
     if "阴" in weather_str:
@@ -536,14 +517,20 @@ def task_weather_dashboard():
     except AttributeError:
         tw = draw.textbbox((0, 0), weather_text, font=font_36)[2] - draw.textbbox((0, 0), weather_text, font=font_36)[0]
     
-    # 计算文字的绝对中心点，让图标的中央轴线直接与文字中央轴线对齐
+    # 计算文字的绝对中心点
     text_center_x = wx_x + tw / 2
     
-    # 从微调配置区读取偏移量，若没有匹配到则默认 (0, 0)
-    offset_x, offset_y = LARGE_ICON_OFFSETS.get(current_icon, (0, 0))
+    # 初始化图标中心轴线位置
+    icon_x = text_center_x
+    icon_y = 42
+    
+    # 🌟 核心对齐：如果是晴天（白天晴 B 或 夜间晴 C），则应用单独的像素级微调
+    if current_icon in ["B", "C"]:
+        icon_x += SUNNY_ICON_OFFSET[0]
+        icon_y += SUNNY_ICON_OFFSET[1]
         
     draw.text((wx_x, 85), weather_text, font=font_36, fill=0)
-    draw.text((text_center_x + offset_x, 42 + offset_y), current_icon, font=font_weather_icon_large, fill=0, anchor="ma")
+    draw.text((icon_x, icon_y), current_icon, font=font_weather_icon_large, fill=0, anchor="ma")
 
     # 侧边右侧黑色背景框
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
@@ -551,7 +538,7 @@ def task_weather_dashboard():
     draw.text((270, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
     draw.text((270, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
 
-    # 日出日落（日落图标起始位置为 145，与下方后天预报完美垂直对齐）
+    # 🌟 日出日落图标完美回归（日落起始位置为 145，与下方后天预报完美垂直对齐）
     draw.text((25, 144), "A", font=font_weather_icon_small, fill=0, anchor="lm")
     draw.text((45, 144), weather['sunrise'], font=font_item, fill=0, anchor="lm")
     
@@ -560,7 +547,7 @@ def task_weather_dashboard():
     
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
-    # 时区窗口日程过滤逻辑
+    # 日程过滤逻辑
     all_todos = get_todo_data()
     today_str = now_beijing.strftime("%Y-%m-%d")
     is_after_1030 = now_beijing.hour > 22 or (now_beijing.hour == 22 and now_beijing.minute >= 30)
