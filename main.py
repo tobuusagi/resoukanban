@@ -27,6 +27,34 @@ WTTR_LOCATION = "Tianning,Changzhou"
 
 
 # =====================================================================
+# 🛠️ 🔍 图标像素级微调配置区（若觉得个别大图标高低不齐，可在此微调）
+# =====================================================================
+# 针对实时大图标在字体内置重心不同的微调字典 (X方向偏移, Y方向偏移)
+# 正数向右/下，负数向左/上
+LARGE_ICON_OFFSETS = {
+    # 👇 保持原样不偏移的图标
+    "B": (0, 0),     # 白天晴
+    "C": (0, 0),     # 夜间晴
+    "M": (0, 0),     # 霾
+    
+    # 👇 统一向上微调 5 像素的图标
+    "Y": (0, -10),    # 多云 / 少云 / 晴间多云
+    "N": (0, -5),    # 阴天
+    "X": (0, -5),    # 冰雹
+    "O": (0, -5),    # 雷
+    "W": (0, -5),    # 大雪 / 暴雪 / 中雪
+    "U": (0, -5),    # 雪 / 阵雪
+    "T": (0, -5),    # 阵雨
+    "R": (0, -5),    # 大雨 / 暴雨 / 中雨
+    "Q": (0, -5),    # 雨 / 毛毛雨 / 细雨
+    "L": (0, -5),    # 雾
+    "F": (0, -5),    # 大风 / 狂风 / 暴风 / 台风
+    "E": (0, -5),    # 风
+    "S": (0, -5),    # 未知 / 默认兜底
+}
+
+
+# =====================================================================
 # 🔒 第二部分：核心密钥区（⚠️绝对不要改这里，请在 GitHub Secrets 里配置） 🔒
 # =====================================================================
 API_KEY = os.environ.get("ZECTRIX_API_KEY")
@@ -508,17 +536,14 @@ def task_weather_dashboard():
     except AttributeError:
         tw = draw.textbbox((0, 0), weather_text, font=font_36)[2] - draw.textbbox((0, 0), weather_text, font=font_36)[0]
     
-    # 🌟 核心改进 1：改用 anchor="ma" (顶部居中对齐) 
-    # 计算文字的绝对中心点，让图标的中央轴线直接与文字中央轴线对齐，彻底纠正“多云(Y)”等标准图标
+    # 计算文字的绝对中心点，让图标的中央轴线直接与文字中央轴线对齐
     text_center_x = wx_x + tw / 2
     
-    # 对设计偏小或天生偏心的特殊图标（如夜间晴C、日出A）做个别专项微调补偿
-    icon_offset_x = 0
-    if current_icon == "C":
-        icon_offset_x = 0  # 如果你觉得晴天还有极细微偏移，可以在此增减像素值（例如 -2 或 2）
+    # 从微调配置区读取偏移量，若没有匹配到则默认 (0, 0)
+    offset_x, offset_y = LARGE_ICON_OFFSETS.get(current_icon, (0, 0))
         
     draw.text((wx_x, 85), weather_text, font=font_36, fill=0)
-    draw.text((text_center_x + icon_offset_x, 42), current_icon, font=font_weather_icon_large, fill=0, anchor="ma")
+    draw.text((text_center_x + offset_x, 42 + offset_y), current_icon, font=font_weather_icon_large, fill=0, anchor="ma")
 
     # 侧边右侧黑色背景框
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
@@ -526,12 +551,12 @@ def task_weather_dashboard():
     draw.text((270, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
     draw.text((270, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
 
-    # 🌟 核心改进 2：将日落图标起始位置从 125 右移至 150，腾出充裕空间，完美解决文字交织重叠
+    # 日出日落（日落图标起始位置为 145，与下方后天预报完美垂直对齐）
     draw.text((25, 144), "A", font=font_weather_icon_small, fill=0, anchor="lm")
     draw.text((45, 144), weather['sunrise'], font=font_item, fill=0, anchor="lm")
     
-    draw.text((150, 144), "J", font=font_weather_icon_small, fill=0, anchor="lm")
-    draw.text((170, 144), weather['sunset'], font=font_item, fill=0, anchor="lm")
+    draw.text((145, 144), "J", font=font_weather_icon_small, fill=0, anchor="lm")
+    draw.text((165, 144), weather['sunset'], font=font_item, fill=0, anchor="lm")
     
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
@@ -550,7 +575,7 @@ def task_weather_dashboard():
     target_todos.sort(key=lambda x: x.get("dueTime", ""))
     display_todos = target_todos[:2] if is_after_1030 else target_todos[:3]
 
-    # 未来预报（前两列）
+    # 未来预报（前两列：明天 x=20, 后天 x=145）
     for i in range(2):
         if i < len(weather['forecasts']):
             day = weather['forecasts'][i]
