@@ -41,7 +41,7 @@ TARGET_DEVICES = list(set([m.strip() for m in raw_mac_list if m and m.strip()]))
 
 
 # =====================================================================
-# ⚙️ 第三部分：底层运行逻辑（如果没有报错，不需要修改以下代码） ⚙️
+# ⚙️ 第三部分：底层运行逻辑（如果没有报错，不需要修改以下 code） ⚙️
 # =====================================================================
 
 # --- 字体设置 ---
@@ -57,7 +57,7 @@ try:
     font_48 = ImageFont.truetype(FONT_PATH, 48)
     font_36 = ImageFont.truetype(FONT_PATH, 36)         # 实时天气中文字体 (36号)
     
-    # 🌟 解决方案：将图标字体拆分为大、小两组，完美匹配文本字号
+    # 将图标字体拆分为大、小两组，完美匹配文本字号
     font_weather_icon_large = ImageFont.truetype(WEATHER_FONT_PATH, 36) # 专门匹配实时天气大字 (36号)
     font_weather_icon_small = ImageFont.truetype(WEATHER_FONT_PATH, 18) # 专门匹配未来预报小字 (18号)
 except Exception as e:
@@ -500,11 +500,22 @@ def task_weather_dashboard():
         temp_w = draw.textbbox((0, 0), curr_temp_str, font=font_48)[2] - draw.textbbox((0, 0), curr_temp_str, font=font_48)[0]
     
     wx_x = 25 + temp_w + 12
-    draw.text((wx_x, 85), weather['weather'], font=font_36, fill=0)
+    weather_text = weather['weather']
+    current_icon = get_weather_icon(weather_text)
     
-    # 🌟 4. 实时大天气图标：更改为使用大图标字体 (font_weather_icon_large=36)，使其和中文字体完全一样大
-    current_icon = get_weather_icon(weather['weather'])
-    draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
+    # 🌟 修改点 1：通过计算文字与大图标的像素宽度，实现实时的完美【水平居中对齐】
+    try:
+        tw = draw.textlength(weather_text, font=font_36)
+        iw = draw.textlength(current_icon, font=font_weather_icon_large)
+    except AttributeError:
+        tw = draw.textbbox((0, 0), weather_text, font=font_36)[2] - draw.textbbox((0, 0), weather_text, font=font_36)[0]
+        iw = draw.textbbox((0, 0), current_icon, font=font_weather_icon_large)[2] - draw.textbbox((0, 0), current_icon, font=font_weather_icon_large)[0]
+    
+    # 计算使图标居中的 X 坐标偏移量
+    icon_x = wx_x + (tw - iw) / 2
+    
+    draw.text((wx_x, 85), weather_text, font=font_36, fill=0)
+    draw.text((icon_x, 42), current_icon, font=font_weather_icon_large, fill=0)
 
     # 侧边右侧黑色背景框
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
@@ -512,7 +523,13 @@ def task_weather_dashboard():
     draw.text((270, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
     draw.text((270, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
 
-    draw.text((25, 135), f"日出 {weather['sunrise']}   日落 {weather['sunset']}", font=font_item, fill=0)
+    # 🌟 修改点 2：将“日出/日落”文字替换为对应的图标 A 和 J，并利用 anchor="lm" 实现完美的水平线对齐
+    draw.text((25, 144), "A", font=font_weather_icon_small, fill=0, anchor="lm")
+    draw.text((45, 144), weather['sunrise'], font=font_item, fill=0, anchor="lm")
+    
+    draw.text((125, 144), "J", font=font_weather_icon_small, fill=0, anchor="lm")
+    draw.text((145, 144), weather['sunset'], font=font_item, fill=0, anchor="lm")
+    
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
     # 时区窗口日程过滤逻辑
@@ -530,26 +547,25 @@ def task_weather_dashboard():
     target_todos.sort(key=lambda x: x.get("dueTime", ""))
     display_todos = target_todos[:2] if is_after_1030 else target_todos[:3]
 
-    # 🌟 5. 未来预报前两列 (今天、明天)：更改为小图标字体 (font_weather_icon_small=18)
-    # 同时将 Y 轴统一设为 200，保证同字号的文字与图标完美水平对齐
+    # 🌟 修改点 3：未来预报（前两列）。使用 anchor="lm" 将 Y 轴固定在 209 像素，使小图标与天气文本上下完美咬合、对齐
     for i in range(2):
         if i < len(weather['forecasts']):
             day = weather['forecasts'][i]
             x = [20, 145][i]
             draw.text((x, 175), day["date"], font=font_item, fill=0)
             
-            weather_text = day['weather']
-            draw.text((x, 200), weather_text, font=font_item, fill=0) 
+            day_weather_text = day['weather']
+            draw.text((x, 209), day_weather_text, font=font_item, fill=0, anchor="lm") 
             
             try:
-                text_w = draw.textlength(weather_text, font=font_item)
+                text_w = draw.textlength(day_weather_text, font=font_item)
             except AttributeError:
-                text_w = draw.textbbox((0, 0), weather_text, font=font_item)[2] - draw.textbbox((0, 0), weather_text, font=font_item)[0]
+                text_w = draw.textbbox((0, 0), day_weather_text, font=font_item)[2] - draw.textbbox((0, 0), day_weather_text, font=font_item)[0]
                 
-            icon_char = get_weather_icon(weather_text)
-            draw.text((x + text_w + 4, 200), icon_char, font=font_weather_icon_small, fill=0) 
+            icon_char = get_weather_icon(day_weather_text)
+            draw.text((x + text_w + 4, 209), icon_char, font=font_weather_icon_small, fill=0, anchor="lm") 
             
-            draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+            draw.text((x, 230), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
     # 渲染第三列 (x=270)
     if display_todos:
@@ -568,24 +584,24 @@ def task_weather_dashboard():
             draw.text((268, todo_y), truncated_line, font=font_small, fill=255)
             todo_y += 24
     else:
-        # 🌟 6. 兜底：无日程显示第三列预报，同样改为小图标字体 (font_weather_icon_small=18)
+        # 🌟 修改点 4：无日程显示的第三列预报兜底。同样使用 anchor="lm" 对齐图标与文本
         if len(weather['forecasts']) >= 3:
             day = weather['forecasts'][2]
             x = 270
             draw.text((x, 175), day["date"], font=font_item, fill=0)
             
-            weather_text = day['weather']
-            draw.text((x, 200), weather_text, font=font_item, fill=0)
+            day_weather_text = day['weather']
+            draw.text((x, 209), day_weather_text, font=font_item, fill=0, anchor="lm")
             
             try:
-                text_w = draw.textlength(weather_text, font=font_item)
+                text_w = draw.textlength(day_weather_text, font=font_item)
             except AttributeError:
-                text_w = draw.textbbox((0, 0), weather_text, font=font_item)[2] - draw.textbbox((0, 0), weather_text, font=font_item)[0]
+                text_w = draw.textbbox((0, 0), day_weather_text, font=font_item)[2] - draw.textbbox((0, 0), day_weather_text, font=font_item)[0]
                 
-            icon_char = get_weather_icon(weather_text)
-            draw.text((x + text_w + 4, 200), icon_char, font=font_weather_icon_small, fill=0)
+            icon_char = get_weather_icon(day_weather_text)
+            draw.text((x + text_w + 4, 209), icon_char, font=font_weather_icon_small, fill=0, anchor="lm")
             
-            draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+            draw.text((x, 230), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
 
     advice = get_clothing_advice(weather['temp_curr'], weather['humidity'])
