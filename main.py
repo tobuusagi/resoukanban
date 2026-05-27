@@ -503,19 +503,22 @@ def task_weather_dashboard():
     weather_text = weather['weather']
     current_icon = get_weather_icon(weather_text)
     
-    # 🌟 修改点 1：通过计算文字与大图标的像素宽度，实现实时的完美【水平居中对齐】
     try:
         tw = draw.textlength(weather_text, font=font_36)
-        iw = draw.textlength(current_icon, font=font_weather_icon_large)
     except AttributeError:
         tw = draw.textbbox((0, 0), weather_text, font=font_36)[2] - draw.textbbox((0, 0), weather_text, font=font_36)[0]
-        iw = draw.textbbox((0, 0), current_icon, font=font_weather_icon_large)[2] - draw.textbbox((0, 0), current_icon, font=font_weather_icon_large)[0]
     
-    # 计算使图标居中的 X 坐标偏移量
-    icon_x = wx_x + (tw - iw) / 2
+    # 🌟 核心改进 1：改用 anchor="ma" (顶部居中对齐) 
+    # 计算文字的绝对中心点，让图标的中央轴线直接与文字中央轴线对齐，彻底纠正“多云(Y)”等标准图标
+    text_center_x = wx_x + tw / 2
     
+    # 对设计偏小或天生偏心的特殊图标（如夜间晴C、日出A）做个别专项微调补偿
+    icon_offset_x = 0
+    if current_icon == "C":
+        icon_offset_x = 0  # 如果你觉得晴天还有极细微偏移，可以在此增减像素值（例如 -2 或 2）
+        
     draw.text((wx_x, 85), weather_text, font=font_36, fill=0)
-    draw.text((icon_x, 42), current_icon, font=font_weather_icon_large, fill=0)
+    draw.text((text_center_x + icon_offset_x, 42), current_icon, font=font_weather_icon_large, fill=0, anchor="ma")
 
     # 侧边右侧黑色背景框
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
@@ -523,12 +526,12 @@ def task_weather_dashboard():
     draw.text((270, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
     draw.text((270, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
 
-    # 🌟 修改点 2：将“日出/日落”文字替换为对应的图标 A 和 J，并利用 anchor="lm" 实现完美的水平线对齐
+    # 🌟 核心改进 2：将日落图标起始位置从 125 右移至 150，腾出充裕空间，完美解决文字交织重叠
     draw.text((25, 144), "A", font=font_weather_icon_small, fill=0, anchor="lm")
     draw.text((45, 144), weather['sunrise'], font=font_item, fill=0, anchor="lm")
     
-    draw.text((125, 144), "J", font=font_weather_icon_small, fill=0, anchor="lm")
-    draw.text((145, 144), weather['sunset'], font=font_item, fill=0, anchor="lm")
+    draw.text((150, 144), "J", font=font_weather_icon_small, fill=0, anchor="lm")
+    draw.text((170, 144), weather['sunset'], font=font_item, fill=0, anchor="lm")
     
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     
@@ -547,7 +550,7 @@ def task_weather_dashboard():
     target_todos.sort(key=lambda x: x.get("dueTime", ""))
     display_todos = target_todos[:2] if is_after_1030 else target_todos[:3]
 
-    # 🌟 修改点 3：未来预报（前两列）。使用 anchor="lm" 将 Y 轴固定在 209 像素，使小图标与天气文本上下完美咬合、对齐
+    # 未来预报（前两列）
     for i in range(2):
         if i < len(weather['forecasts']):
             day = weather['forecasts'][i]
@@ -584,7 +587,7 @@ def task_weather_dashboard():
             draw.text((268, todo_y), truncated_line, font=font_small, fill=255)
             todo_y += 24
     else:
-        # 🌟 修改点 4：无日程显示的第三列预报兜底。同样使用 anchor="lm" 对齐图标与文本
+        # 无日程显示的第三列预报兜底
         if len(weather['forecasts']) >= 3:
             day = weather['forecasts'][2]
             x = 270
