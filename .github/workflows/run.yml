@@ -6,6 +6,9 @@ on:
   - cron: '5,25 1 * * *' # 每20分钟运行一次
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
