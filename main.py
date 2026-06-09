@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import calendar
 import re
@@ -388,18 +389,46 @@ def task_calendar():
         curr_y += row_h
     push_image(img, 3)
 
+# --- 天气缓存 ---
+WEATHER_CACHE_FILE = "weather_cache.json"
+
+def _load_weather_cache():
+    try:
+        with open(WEATHER_CACHE_FILE, "r", encoding="utf-8") as f:
+            cached = json.load(f)
+        print(f"📂 已加载天气缓存（{cached.get('_cache_time', '未知时间')}）")
+        return cached
+    except Exception:
+        return None
+
+def _save_weather_cache(data):
+    try:
+        with open(WEATHER_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print("💾 天气数据已缓存")
+    except Exception as e:
+        print(f"⚠️ 缓存写入失败: {e}")
+
 # --- 混合天气获取 ---
 def get_hybrid_weather():
     result = {
         "weather": "未知", "temp_curr": 0, 
         "temp_low": 0, "temp_high": 0, "wind_info": "无数据", "humidity": "0%", 
-        "feel_temp": "N/A", "sunrise": "--:--", "sunset": "--:--", "forecasts": []
+        "feel_temp": "N/A", "sunrise": "--:--", "sunset": "--:--", "forecasts": [],
+        "request_failed": False
     }
     
     if not AMAP_KEY:
         print("⚠️ 未设置 AMAP_WEATHER_KEY")
+        cached = _load_weather_cache()
+        if cached:
+            cached["request_failed"] = True
+            return cached
+        result["request_failed"] = True
         return result
 
+    # --- 高德实时天气 ---
+    amap_live_ok = False
     try:
         base_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={CITY_ADCODE}&key={AMAP_KEY}&extensions=base"
         base_resp = requests.get(base_url, timeout=10).json()
@@ -413,6 +442,7 @@ def get_hybrid_weather():
             wind_num = re.search(r'\d+', wind_power_raw)
             wind_power = wind_num.group(0) if wind_num else "0"
             result["wind_info"] = f"{wind_power}级 {wind_direction}"
+            amap_live_ok = True
             
             try:
                 t = result["temp_curr"]
@@ -427,6 +457,8 @@ def get_hybrid_weather():
     except Exception as e:
         print(f"❌ 高德实时请求异常: {e}")
 
+    # --- 高德预报天气 ---
+    amap_forecast_ok = False
     try:
         all_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={CITY_ADCODE}&key={AMAP_KEY}&extensions=all"
         all_resp = requests.get(all_url, timeout=10).json()
@@ -444,18 +476,56 @@ def get_hybrid_weather():
                         "temp_low": int(day.get("nighttemp", 0)),
                         "temp_high": int(day.get("daytemp", 0))
                     })
+            amap_forecast_ok = True
     except Exception as e:
         print(f"❌ 高德预报请求异常: {e}")
 
+    # --- wttr.in 日出日落 ---
+    wttr_ok = False
     try:
         wttr_url = f"https://wttr.in/{WTTR_LOCATION}?format=j1&lang=zh"
         wttr_resp = requests.get(wttr_url, timeout=15).json()
         astro = wttr_resp['weather'][0]['astronomy'][0]
         result["sunrise"] = astro['sunrise']
         result["sunset"] = astro['sunset']
+        wttr_ok = True
     except Exception as e:
         print(f"❌ wttr.in 请求异常: {e}")
 
+    # --- 判断是否需要回退到缓存 ---
+    if not amap_live_ok:
+        print("⚠️ 高德实时请求失败，尝试使用缓存数据...")
+        cached = _load_weather_cache()
+        if cached:
+            # 实时数据失败：用缓存的实时部分，但保留本次成功的预报和日出日落
+            if not amap_forecast_ok:
+                # 预报也失败了，完全回退缓存
+                cached["request_failed"] = True
+                return cached
+            else:
+                # 预报成功，用缓存的实时数据 + 本次的预报数据
+                result["weather"] = cached.get("weather", "未知")
+                result["temp_curr"] = cached.get("temp_curr", 0)
+                result["humidity"] = cached.get("humidity", "0%")
+                result["wind_info"] = cached.get("wind_info", "无数据")
+                result["feel_temp"] = cached.get("feel_temp", "N/A")
+                result["sunrise"] = cached.get("sunrise", "--:--") if not wttr_ok else result["sunrise"]
+                result["sunset"] = cached.get("sunset", "--:--") if not wttr_ok else result["sunset"]
+                result["request_failed"] = True
+                result["_cache_time"] = cached.get("_cache_time", "未知")
+                _save_weather_cache(result)
+                return result
+        else:
+            # 没有缓存，只能用默认值
+            if not amap_forecast_ok:
+                result["request_failed"] = True
+                return result
+
+    # --- 成功获取数据，保存缓存 ---
+    now_beijing = datetime.utcnow() + timedelta(hours=8)
+    result["_cache_time"] = now_beijing.strftime("%Y-%m-%d %H:%M")
+    result["request_failed"] = False
+    _save_weather_cache(result)
     return result
 
 # --- 任务：天气看板 ---
@@ -502,9 +572,12 @@ def task_weather_dashboard():
     wx_x = 25 + temp_w + 12
     draw.text((wx_x, 85), weather['weather'], font=font_36, fill=0)
     
-    # 🌟 4. 实时大天气图标：更改为使用大图标字体 (font_weather_icon_large=36)，使其和中文字体完全一样大
-    current_icon = get_weather_icon(weather['weather'])
-    draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
+    # 🌟 4. 实时大天气图标：请求成功显示图标，请求失败显示文字提示
+    if weather.get("request_failed"):
+        draw.text((wx_x, 55), "天气请求失败", font=font_small, fill=0)
+    else:
+        current_icon = get_weather_icon(weather['weather'])
+        draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
 
     # 侧边右侧黑色背景框
     draw.rounded_rectangle([(260, 45), (385, 130)], radius=8, outline=0, fill=0)
