@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0  # 获取完整历史，以便后续提交
 
       - name: 恢复天气缓存
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: weather_cache.json
           key: weather-cache-${{ github.run_id }}
