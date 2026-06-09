@@ -17,6 +17,14 @@ jobs:
         with:
           fetch-depth: 0  # 获取完整历史，以便后续提交
 
+      - name: 恢复天气缓存
+        uses: actions/cache@v4
+        with:
+          path: weather_cache.json
+          key: weather-cache-${{ github.run_id }}
+          restore-keys: |
+            weather-cache-
+
       - name: 安装 Python 环境
         uses: actions/setup-python@v6
         with:
@@ -32,5 +40,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AMAP_WEATHER_KEY: ${{ secrets.AMAP_WEATHER_KEY }}   # 新增这一行
         run: python main.py
-
-    
