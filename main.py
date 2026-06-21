@@ -663,7 +663,7 @@ def task_weather_dashboard(device_config):
         wind_w = draw.textbbox((0, 0), wind_text, font=font_item)[2]
     draw.text((270, 145), wind_text, font=font_item, fill=0, anchor="lm")
     
-    draw.line([(20, 165), (380, 165)], fill=0, width=1)
+    draw.line([(20, 155), (380, 155)], fill=0, width=1)
     
     # 时区窗口日程过滤逻辑
     all_todos = get_todo_data()
@@ -685,10 +685,10 @@ def task_weather_dashboard(device_config):
         if i < len(weather['forecasts']):
             day = weather['forecasts'][i]
             x = [20, 145][i]
-            draw.text((x, 178), day["date"], font=font_item, fill=0)
+            draw.text((x, 168), day["date"], font=font_item, fill=0)
             
             weather_text = day['weather']
-            draw.text((x, 203), weather_text, font=font_item, fill=0) 
+            draw.text((x, 193), weather_text, font=font_item, fill=0) 
             
             try:
                 text_w = draw.textlength(weather_text, font=font_item)
@@ -696,14 +696,14 @@ def task_weather_dashboard(device_config):
                 text_w = draw.textbbox((0, 0), weather_text, font=font_item)[2] - draw.textbbox((0, 0), weather_text, font=font_item)[0]
                 
             icon_char = get_weather_icon(weather_text)
-            draw.text((x + text_w + 4, 203), icon_char, font=font_weather_icon_small, fill=0) 
+            draw.text((x + text_w + 4, 193), icon_char, font=font_weather_icon_small, fill=0) 
             
-            draw.text((x, 223), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+            draw.text((x, 213), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
     # 渲染第三列 (x=270)
     if display_todos:
-        draw.rounded_rectangle([(260, 168), (385, 248)], radius=8, outline=0, fill=0)
-        todo_y = 174
+        draw.rounded_rectangle([(260, 158), (385, 238)], radius=8, outline=0, fill=0)
+        todo_y = 164
         if is_after_1030:
             draw.text((268, todo_y), "明日：", font=font_small, fill=255)
             todo_y += 24
@@ -721,10 +721,10 @@ def task_weather_dashboard(device_config):
         if len(weather['forecasts']) >= 3:
             day = weather['forecasts'][2]
             x = 270
-            draw.text((x, 178), day["date"], font=font_item, fill=0)
+            draw.text((x, 168), day["date"], font=font_item, fill=0)
             
             weather_text = day['weather']
-            draw.text((x, 203), weather_text, font=font_item, fill=0)
+            draw.text((x, 193), weather_text, font=font_item, fill=0)
             
             try:
                 text_w = draw.textlength(weather_text, font=font_item)
@@ -732,9 +732,9 @@ def task_weather_dashboard(device_config):
                 text_w = draw.textbbox((0, 0), weather_text, font=font_item)[2] - draw.textbbox((0, 0), weather_text, font=font_item)[0]
                 
             icon_char = get_weather_icon(weather_text)
-            draw.text((x + text_w + 4, 203), icon_char, font=font_weather_icon_small, fill=0)
+            draw.text((x + text_w + 4, 193), icon_char, font=font_weather_icon_small, fill=0)
             
-            draw.text((x, 223), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+            draw.text((x, 213), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
 
     advice = get_clothing_advice(weather['temp_curr'], indoor['indoor_humidity'])
