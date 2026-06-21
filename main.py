@@ -642,11 +642,11 @@ def task_weather_dashboard(device_config):
         current_icon = get_weather_icon(weather['weather'])
         draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
 
-    # 🌟 侧边右侧黑色背景框 - 室内/室外/体感（加大面积）
-    draw.rounded_rectangle([(260, 40), (385, 130)], radius=8, outline=0, fill=0)
-    draw.text((270, 50), f"室内 {indoor['indoor_temp']} {indoor['indoor_humidity']}", font=font_small, fill=255)
-    draw.text((270, 72), f"室外 {weather['humidity']}", font=font_small, fill=255)
-    draw.text((270, 94), f"体感 {feel_temp}", font=font_small, fill=255)
+    # 🌟 侧边右侧黑色背景框 - 室内/室外/体感（加宽）
+    draw.rounded_rectangle([(240, 40), (385, 130)], radius=8, outline=0, fill=0)
+    draw.text((250, 50), f"室内 {indoor['indoor_temp']} {indoor['indoor_humidity']}", font=font_small, fill=255)
+    draw.text((250, 72), f"室外 {weather['humidity']}", font=font_small, fill=255)
+    draw.text((250, 94), f"体感 {feel_temp}", font=font_small, fill=255)
 
     # 🌟 日出日落 + 风力（同一行，下移）
     draw.text((25, 145), "A", font=font_weather_icon_small, fill=0, anchor="lm")
