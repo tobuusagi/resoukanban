@@ -43,7 +43,7 @@ def get_device_configs():
             "location": os.environ.get("HOME_WTTR_LOCATION", "Tianning,Changzhou"),
             "temp_sensor": os.environ.get("HOME_HA_TEMP_SENSOR", ""),
             "humid_sensor": os.environ.get("HOME_HA_HUMID_SENSOR", ""),
-            "name": "家"
+            "name": "新北区"
         })
     
     # 办公室
@@ -55,7 +55,7 @@ def get_device_configs():
             "location": os.environ.get("OFFICE_WTTR_LOCATION", ""),
             "temp_sensor": os.environ.get("OFFICE_HA_TEMP_SENSOR", ""),
             "humid_sensor": os.environ.get("OFFICE_HA_HUMID_SENSOR", ""),
-            "name": "办公室"
+            "name": "天宁区"
         })
     
     # 兼容旧版：如果没有 HOME_/OFFICE_ 配置，使用原来的 ZECTRIX_MAC
@@ -632,7 +632,8 @@ def task_weather_dashboard(device_config):
         temp_w = draw.textbbox((0, 0), curr_temp_str, font=font_48)[2] - draw.textbbox((0, 0), curr_temp_str, font=font_48)[0]
     
     wx_x = 25 + temp_w + 12
-    draw.text((wx_x, 85), weather['weather'], font=font_36, fill=0)
+    # 天气文字底部对齐实时温度
+    draw.text((wx_x, 77), weather['weather'], font=font_36, fill=0)
     
     # 🌟 4. 实时大天气图标
     if weather.get("request_failed"):
@@ -641,18 +642,18 @@ def task_weather_dashboard(device_config):
         current_icon = get_weather_icon(weather['weather'])
         draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
 
-    # 🌟 侧边右侧黑色背景框 - 室内/室外/体感
-    draw.rounded_rectangle([(260, 45), (385, 120)], radius=8, outline=0, fill=0)
-    draw.text((270, 53), f"室内 {indoor['indoor_temp']} {indoor['indoor_humidity']}", font=font_small, fill=255)
-    draw.text((270, 75), f"室外 {weather['humidity']}", font=font_small, fill=255)
-    draw.text((270, 97), f"体感 {feel_temp}", font=font_small, fill=255)
+    # 🌟 侧边右侧黑色背景框 - 室内/室外/体感（加大面积）
+    draw.rounded_rectangle([(260, 40), (385, 130)], radius=8, outline=0, fill=0)
+    draw.text((270, 50), f"室内 {indoor['indoor_temp']} {indoor['indoor_humidity']}", font=font_small, fill=255)
+    draw.text((270, 72), f"室外 {weather['humidity']}", font=font_small, fill=255)
+    draw.text((270, 94), f"体感 {feel_temp}", font=font_small, fill=255)
 
-    # 🌟 日出日落 + 风力（同一行）
-    draw.text((25, 135), "A", font=font_weather_icon_small, fill=0, anchor="lm")
-    draw.text((45, 135), weather['sunrise'], font=font_item, fill=0, anchor="lm")
+    # 🌟 日出日落 + 风力（同一行，下移）
+    draw.text((25, 145), "A", font=font_weather_icon_small, fill=0, anchor="lm")
+    draw.text((45, 145), weather['sunrise'], font=font_item, fill=0, anchor="lm")
     
-    draw.text((145, 135), "J", font=font_weather_icon_small, fill=0, anchor="lm")
-    draw.text((165, 135), weather['sunset'], font=font_item, fill=0, anchor="lm")
+    draw.text((145, 145), "J", font=font_weather_icon_small, fill=0, anchor="lm")
+    draw.text((165, 145), weather['sunset'], font=font_item, fill=0, anchor="lm")
     
     # 风力信息放在日出日落行右侧
     wind_text = f"{weather['wind_info']}风"
@@ -660,9 +661,9 @@ def task_weather_dashboard(device_config):
         wind_w = draw.textlength(wind_text, font=font_item)
     except AttributeError:
         wind_w = draw.textbbox((0, 0), wind_text, font=font_item)[2]
-    draw.text((270, 135), wind_text, font=font_item, fill=0, anchor="lm")
+    draw.text((270, 145), wind_text, font=font_item, fill=0, anchor="lm")
     
-    draw.line([(20, 155), (380, 155)], fill=0, width=1)
+    draw.line([(20, 165), (380, 165)], fill=0, width=1)
     
     # 时区窗口日程过滤逻辑
     all_todos = get_todo_data()
@@ -684,10 +685,10 @@ def task_weather_dashboard(device_config):
         if i < len(weather['forecasts']):
             day = weather['forecasts'][i]
             x = [20, 145][i]
-            draw.text((x, 168), day["date"], font=font_item, fill=0)
+            draw.text((x, 178), day["date"], font=font_item, fill=0)
             
             weather_text = day['weather']
-            draw.text((x, 193), weather_text, font=font_item, fill=0) 
+            draw.text((x, 203), weather_text, font=font_item, fill=0) 
             
             try:
                 text_w = draw.textlength(weather_text, font=font_item)
@@ -695,14 +696,14 @@ def task_weather_dashboard(device_config):
                 text_w = draw.textbbox((0, 0), weather_text, font=font_item)[2] - draw.textbbox((0, 0), weather_text, font=font_item)[0]
                 
             icon_char = get_weather_icon(weather_text)
-            draw.text((x + text_w + 4, 193), icon_char, font=font_weather_icon_small, fill=0) 
+            draw.text((x + text_w + 4, 203), icon_char, font=font_weather_icon_small, fill=0) 
             
-            draw.text((x, 213), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+            draw.text((x, 223), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
     # 渲染第三列 (x=270)
     if display_todos:
-        draw.rounded_rectangle([(260, 158), (385, 238)], radius=8, outline=0, fill=0)
-        todo_y = 164
+        draw.rounded_rectangle([(260, 168), (385, 248)], radius=8, outline=0, fill=0)
+        todo_y = 174
         if is_after_1030:
             draw.text((268, todo_y), "明日：", font=font_small, fill=255)
             todo_y += 24
@@ -720,10 +721,10 @@ def task_weather_dashboard(device_config):
         if len(weather['forecasts']) >= 3:
             day = weather['forecasts'][2]
             x = 270
-            draw.text((x, 168), day["date"], font=font_item, fill=0)
+            draw.text((x, 178), day["date"], font=font_item, fill=0)
             
             weather_text = day['weather']
-            draw.text((x, 193), weather_text, font=font_item, fill=0)
+            draw.text((x, 203), weather_text, font=font_item, fill=0)
             
             try:
                 text_w = draw.textlength(weather_text, font=font_item)
@@ -731,9 +732,9 @@ def task_weather_dashboard(device_config):
                 text_w = draw.textbbox((0, 0), weather_text, font=font_item)[2] - draw.textbbox((0, 0), weather_text, font=font_item)[0]
                 
             icon_char = get_weather_icon(weather_text)
-            draw.text((x + text_w + 4, 193), icon_char, font=font_weather_icon_small, fill=0)
+            draw.text((x + text_w + 4, 203), icon_char, font=font_weather_icon_small, fill=0)
             
-            draw.text((x, 213), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
+            draw.text((x, 223), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
 
     advice = get_clothing_advice(weather['temp_curr'], indoor['indoor_humidity'])
