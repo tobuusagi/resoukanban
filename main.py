@@ -364,17 +364,31 @@ def task_hotlist():
 
 # --- 日程页面生成 ---
 def get_todo_data():
+    if not API_KEY:
+        return []
     try:
-        now = datetime.utcnow() + timedelta(hours=8)
-        url = f"https://content-api.xiaomi.com/ott/calendar/events?start_time={int(now.timestamp())}&end_time={int((now + timedelta(days=7)).timestamp())}"
-        headers = {"User-Agent": "MiMo/1.0", "Accept": "application/json"}
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get("data", {}).get("events", [])
-    except:
-        pass
-    return []
+        url = "https://cloud.zectrix.com/open/v1/todos"
+        headers = {"X-API-Key": API_KEY}
+        res = requests.get(url, headers=headers, timeout=10).json()
+        
+        raw_todos = []
+        if isinstance(res, list):
+            raw_todos = res
+        elif isinstance(res, dict):
+            raw_todos = res.get("data", []) or res.get("todos", []) or []
+            
+        seen = set()
+        deduped_todos = []
+        for todo in raw_todos:
+            if isinstance(todo, dict):
+                todo_key = (todo.get("title"), todo.get("dueDate"), todo.get("dueTime"))
+                if todo_key not in seen:
+                    seen.add(todo_key)
+                    deduped_todos.append(todo)
+        return deduped_todos
+    except Exception as e:
+        print(f"❌ 获取云端日程异常: {e}")
+        return []
 
 # --- HA 室内数据获取 ---
 def get_ha_indoor_data(temp_sensor, humid_sensor):
