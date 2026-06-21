@@ -41,5 +41,17 @@ jobs:
           ZECTRIX_API_KEY: ${{ secrets.ZECTRIX_API_KEY }}
           ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AMAP_WEATHER_KEY: ${{ secrets.AMAP_WEATHER_KEY }}   # 新增这一行
+          AMAP_WEATHER_KEY: ${{ secrets.AMAP_WEATHER_KEY }}
+          HA_URL: ${{ secrets.HA_URL }}
+          HA_TOKEN: ${{ secrets.HA_TOKEN }}
+          HOME_MAC: ${{ secrets.HOME_MAC }}
+          HOME_CITY_ADCODE: ${{ secrets.HOME_CITY_ADCODE }}
+          HOME_WTTR_LOCATION: ${{ secrets.HOME_WTTR_LOCATION }}
+          HOME_HA_TEMP_SENSOR: ${{ secrets.HOME_HA_TEMP_SENSOR }}
+          HOME_HA_HUMID_SENSOR: ${{ secrets.HOME_HA_HUMID_SENSOR }}
+          OFFICE_MAC: ${{ secrets.OFFICE_MAC }}
+          OFFICE_CITY_ADCODE: ${{ secrets.OFFICE_CITY_ADCODE }}
+          OFFICE_WTTR_LOCATION: ${{ secrets.OFFICE_WTTR_LOCATION }}
+          OFFICE_HA_TEMP_SENSOR: ${{ secrets.OFFICE_HA_TEMP_SENSOR }}
+          OFFICE_HA_HUMID_SENSOR: ${{ secrets.OFFICE_HA_HUMID_SENSOR }}
         run: python main.py

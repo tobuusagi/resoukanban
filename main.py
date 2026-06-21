@@ -610,7 +610,7 @@ def task_weather_dashboard(device_config):
     
     # 3. 实时温度
     curr_temp_str = f"{weather['temp_curr']}°"
-    draw.text((25, 75), curr_temp_str, font=font_48, fill=0)
+    draw.text((25, 65), curr_temp_str, font=font_48, fill=0)
     
     try:
         temp_w = draw.textlength(curr_temp_str, font=font_48)
@@ -646,7 +646,7 @@ def task_weather_dashboard(device_config):
         wind_w = draw.textlength(wind_text, font=font_item)
     except AttributeError:
         wind_w = draw.textbbox((0, 0), wind_text, font=font_item)[2]
-    draw.text((385 - wind_w, 135), wind_text, font=font_item, fill=0, anchor="lm")
+    draw.text((270, 135), wind_text, font=font_item, fill=0, anchor="lm")
     
     draw.line([(20, 155), (380, 155)], fill=0, width=1)
     
