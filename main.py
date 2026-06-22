@@ -254,38 +254,50 @@ def get_lunar_or_festival(y, m, d):
     except:
         return ""
 
-# --- 今日页面生成 ---
+# --- 今日页面生成（日历网格）---
 def task_calendar():
     if "3" not in ENABLED_PAGES: return
     print("生成 Page 3: 日历...")
     img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
     now = datetime.utcnow() + timedelta(hours=8)
-    year, month, day = now.year, now.month, now.day
-    weekdays = ["星期一","星期二","星期三","星期四","星期五","星期六","星期日"]
-    date_str = f"{year}年{month}月{day}日 {weekdays[now.weekday()]}"
-    draw.text((25, 25), date_str, font=font_title, fill=0)
-    try:
-        lunar = ZhDate.from_datetime(now)
-        lunar_str = f"农历 {lunar.chinese()}"
-        draw.text((25, 65), lunar_str, font=font_item, fill=0)
-    except:
-        pass
-    term = get_solar_term(year, month, day)
-    fest = get_lunar_or_festival(year, month, day)
-    if term or fest:
-        text = f"今日：{term or ''} {fest or ''}".strip()
-        draw.text((25, 100), text, font=font_item, fill=0)
-    try:
-        with open("holiday.json", "r", encoding="utf-8") as f:
-            holidays = json.load(f)
-            today_date = f"{year}-{month:02d}-{day:02d}"
-            for h in holidays.get("days", []):
-                if h.get("date") == today_date and h.get("isOffDay"):
-                    draw.text((25, 130), f"🎉 {h.get('name', '假期')}", font=font_item, fill=0)
-                    break
-    except:
-        pass
+    y, m, today = now.year, now.month, now.day
+
+    # 顶部：大月份数字 + 英文月名 + 年份
+    draw.text((20, 10), str(m), font=font_huge, fill=0)
+    draw.text((90, 20), now.strftime("%B"), font=font_title, fill=0)
+    draw.text((90, 48), str(y), font=font_item, fill=0)
+    draw.line([(20, 78), (380, 78)], fill=0, width=2)
+
+    # 星期表头
+    headers = ["日", "一", "二", "三", "四", "五", "六"]
+    col_w = 53
+    for i, h in enumerate(headers):
+        draw.text((25 + i*col_w, 88), h, font=font_small, fill=0)
+
+    # 日历网格
+    calendar.setfirstweekday(calendar.SUNDAY)
+    cal = calendar.monthcalendar(y, m)
+    curr_y, row_h = 115, 38
+    for week in cal:
+        for c, day in enumerate(week):
+            if day != 0:
+                dx = 25 + c * col_w
+                if day == today:
+                    draw.rounded_rectangle([(dx-3, curr_y-2), (dx+35, curr_y+32)], radius=5, outline=0)
+                draw.text((dx+2, curr_y), str(day), font=font_item, fill=0)
+                bottom_text = get_lunar_or_festival(y, m, day)
+                if bottom_text:
+                    if len(bottom_text) > 3:
+                        try:
+                            font_smaller = ImageFont.truetype(FONT_PATH, 10)
+                            draw.text((dx+2, curr_y+18), bottom_text, font=font_smaller, fill=0)
+                        except:
+                            draw.text((dx+2, curr_y+18), bottom_text[:3], font=font_tiny, fill=0)
+                    else:
+                        draw.text((dx+2, curr_y+18), bottom_text, font=font_tiny, fill=0)
+        curr_y += row_h
+
     # 日历页面推送到所有设备
     all_macs = [c["mac"] for c in DEVICE_CONFIGS]
     for mac in all_macs:
@@ -323,44 +335,80 @@ def get_hotlist():
     return []
 
 def task_hotlist():
-    if "1" not in ENABLED_PAGES and "2" not in ENABLED_PAGES: return
-    hotlist = get_hotlist()
-    if not hotlist: return
-    now_beijing = datetime.utcnow() + timedelta(hours=8)
-    update_time = now_beijing.strftime("%H:%M")
+    if "1" not in ENABLED_PAGES and "2" not in ENABLED_PAGES:
+        return
+
+    source_map = {"zhihu": "知乎热榜", "bilibili": "B站热搜", "github": "GitHub 热门"}
+    raw_hotlist = get_hotlist()
+    titles = [item.get("title", "") for item in raw_hotlist]
+    title_display = source_map.get(HOTLIST_SOURCE, "热门看板")
+
+    def wrap_text_by_pixels(draw, text, font, max_width):
+        lines = []
+        current_line = ""
+        for char in text:
+            test_line = current_line + char
+            try:
+                w = draw.textlength(test_line, font=font)
+            except AttributeError:
+                w = draw.textbbox((0,0), test_line, font=font)[2]
+            if w <= max_width:
+                current_line = test_line
+            else:
+                lines.append(current_line)
+                current_line = char
+        if current_line:
+            lines.append(current_line)
+        return lines
+
+    def draw_list(draw, page_title, items, start_idx):
+        draw.rounded_rectangle([(10, 10), (390, 45)], radius=8, fill=0)
+        draw.text((20, 15), page_title, font=font_title, fill=255)
+
+        y, last_idx = 55, start_idx
+        item_gap = 12
+        line_height = 23
+
+        for i in range(start_idx, len(items)):
+            lines = wrap_text_by_pixels(draw, items[i], font_item, max_width=340)
+            required_h = len(lines) * line_height
+            if y + required_h > 295:
+                break
+
+            current_num = i + 1
+            draw.rounded_rectangle([(10, y), (36, y+24)], radius=6, fill=0)
+            num_x = 18 if current_num < 10 else 11
+            draw.text((num_x, y+3), str(current_num), font=font_small, fill=255)
+
+            curr_y = y + 1
+            for line in lines:
+                draw.text((45, curr_y), line, font=font_item, fill=0)
+                curr_y += line_height
+
+            y += max(24, required_h) + item_gap
+            last_idx = i + 1
+
+            if y < 290:
+                draw.line([(45, y - item_gap/2), (380, y - item_gap/2)], fill=0, width=1)
+
+        return last_idx
+
     all_macs = [c["mac"] for c in DEVICE_CONFIGS]
-    for page_idx in range(2):
-        if str(page_idx + 1) not in ENABLED_PAGES: continue
-        img = Image.new('1', (400, 300), color=255)
-        draw = ImageDraw.Draw(img)
-        source_names = {"zhihu": "知乎", "bilibili": "哔哩哔哩", "github": "GitHub"}
-        title = f"{source_names.get(HOTLIST_SOURCE, HOTLIST_SOURCE)} 热搜"
-        draw.text((25, 15), title, font=font_title, fill=0)
-        try:
-            title_w = draw.textlength(title, font=font_title)
-        except AttributeError:
-            title_w = draw.textbbox((0, 0), title, font=font_title)[2]
-        update_text = f"更新: {update_time}"
-        try:
-            update_w = draw.textlength(update_text, font=font_small)
-        except AttributeError:
-            update_w = draw.textbbox((0, 0), update_text, font=font_small)[2]
-        draw.text((385 - update_w, 21), update_text, font=font_small, fill=0)
-        draw.line([(20, 45), (380, 45)], fill=0, width=1)
-        start_idx = page_idx * 25
-        end_idx = start_idx + 25
-        current_hotlist = hotlist[start_idx:end_idx]
-        for i, item in enumerate(current_hotlist):
-            y = 55 + i * 10
-            rank = start_idx + i + 1
-            rank_str = f"{rank:2d}"
-            title = item.get("title", "")
-            truncated_title = truncate_text_by_pixels(draw, title, font_tiny, max_width=300)
-            draw.text((25, y), f"{rank_str}.", font=font_tiny, fill=0)
-            draw.text((55, y), truncated_title, font=font_tiny, fill=0)
-        # 热搜页面推送到所有设备
+    next_s = 0
+    if "1" in ENABLED_PAGES:
+        print("生成 Page 1: 热搜 (上)...")
+        img1 = Image.new('1', (400, 300), color=255)
+        next_s = draw_list(ImageDraw.Draw(img1), f"◆ {title_display} (一)", titles, 0)
         for mac in all_macs:
-            push_image(img, page_idx + 1, mac)
+            push_image(img1, 1, mac)
+
+    if "2" in ENABLED_PAGES:
+        print("生成 Page 2: 热搜 (下)...")
+        img2 = Image.new('1', (400, 300), color=255)
+        start_index = next_s if "1" in ENABLED_PAGES else 7
+        draw_list(ImageDraw.Draw(img2), f"◆ {title_display} (二)", titles, start_index)
+        for mac in all_macs:
+            push_image(img2, 2, mac)
 
 # --- 日程页面生成 ---
 def get_todo_data():
