@@ -719,9 +719,9 @@ def task_weather_dashboard(device_config):
     # 2. 当日最高最低气温
     draw.text((25, 45), f"{weather['temp_low']}° / {weather['temp_high']}°", font=font_item, fill=0)
     
-    # 3. 实时温度
+    # 3. 实时温度（底部对齐 y=77）
     curr_temp_str = f"{weather['temp_curr']}°"
-    draw.text((25, 65), curr_temp_str, font=font_48, fill=0)
+    draw.text((25, 77), curr_temp_str, font=font_48, fill=0)
     
     try:
         temp_w = draw.textlength(curr_temp_str, font=font_48)
