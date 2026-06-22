@@ -741,10 +741,15 @@ def task_weather_dashboard(device_config):
 
     # 🌟 室外湿度 - 天气文字右边双排显示，底部对齐天气文字
     try:
+        icon_w = draw.textlength(current_icon, font=font_weather_icon_large)
+    except AttributeError:
+        icon_w = draw.textbbox((0, 0), current_icon, font=font_weather_icon_large)[2]
+    try:
         weather_text_w = draw.textlength(weather['weather'], font=font_36)
     except AttributeError:
         weather_text_w = draw.textbbox((0, 0), weather['weather'], font=font_36)[2]
-    outdoor_x = wx_x + int(weather_text_w) + 10
+    # 取图标和文字中较宽的，确保湿度在两者右边
+    outdoor_x = wx_x + max(int(icon_w), int(weather_text_w)) + 10
     # 天气文字基准线 y=77，湿度值底部对齐它，标签在上一行
     draw.text((outdoor_x, 59), "湿度", font=font_item, fill=0)
     draw.text((outdoor_x, 77), weather['humidity'], font=font_item, fill=0)
