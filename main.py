@@ -559,16 +559,30 @@ def get_hybrid_weather(city_code, location):
 
 # --- 计算体感温度（基于室内温湿度） ---
 def calculate_feel_temp(indoor_temp_str, indoor_humid_str):
-    """基于室内温湿度计算体感温度（无风速项）"""
+    """基于室内温湿度计算体感温度（Heat Index公式，美国国家气象局）"""
     try:
         temp_str = indoor_temp_str.replace("°C", "").replace("°", "").strip()
-        t = float(temp_str)
+        t_c = float(temp_str)
         
         humid_str = indoor_humid_str.replace("%", "").strip()
-        h = float(humid_str)
+        rh = float(humid_str)
         
-        e = (h / 100.0) * 6.105 * math.exp((17.27 * t) / (237.7 + t))
-        feel_temp = t + 0.33 * e - 4.00
+        # 转换为华氏度
+        t_f = t_c * 9.0 / 5.0 + 32.0
+        
+        # Heat Index 公式（华氏度）
+        hi_f = (-42.379 
+                + 2.04901523 * t_f 
+                + 10.14333127 * rh 
+                - 0.22475541 * t_f * rh 
+                - 6.83783e-3 * t_f**2 
+                - 5.481717e-2 * rh**2 
+                + 1.22874e-3 * t_f**2 * rh 
+                + 8.5282e-4 * t_f * rh**2 
+                - 1.99e-6 * t_f**2 * rh**2)
+        
+        # 转换回摄氏度
+        feel_temp = (hi_f - 32.0) * 5.0 / 9.0
         return f"{round(feel_temp, 1)}°C"
     except Exception as e:
         print(f"⚠️ 计算体感温度失败: {e}")
