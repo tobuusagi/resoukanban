@@ -304,11 +304,18 @@ def task_calendar():
                     if len(bottom_text) > 3:
                         try:
                             font_smaller = ImageFont.truetype(FONT_PATH, 10)
-                            draw.text((dx+2, curr_y+18), bottom_text, font=font_smaller, fill=0)
+                            bt_font = font_smaller
                         except:
-                            draw.text((dx+2, curr_y+18), bottom_text[:3], font=font_tiny, fill=0)
+                            bt_font = font_tiny
                     else:
-                        draw.text((dx+2, curr_y+18), bottom_text, font=font_tiny, fill=0)
+                        bt_font = font_tiny
+                    try:
+                        bt_w = draw.textlength(bottom_text, font=bt_font)
+                    except AttributeError:
+                        bt_w = draw.textbbox((0, 0), bottom_text, font=bt_font)[2]
+                    # 居中对齐：单元格中心 - 文字宽度一半
+                    bt_x = dx + (col_w - int(bt_w)) // 2
+                    draw.text((bt_x, curr_y+18), bottom_text, font=bt_font, fill=0)
         curr_y += row_h
 
     # 日历页面推送到所有设备
@@ -732,20 +739,21 @@ def task_weather_dashboard(device_config):
         current_icon = get_weather_icon(weather['weather'])
         draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
 
-    # 🌟 室外湿度 - 天气文字右边双排显示（font_item，行距18px对齐font_36高度）
+    # 🌟 室外湿度 - 天气文字右边双排显示，底部对齐天气文字
     try:
         weather_text_w = draw.textlength(weather['weather'], font=font_36)
     except AttributeError:
         weather_text_w = draw.textbbox((0, 0), weather['weather'], font=font_36)[2]
     outdoor_x = wx_x + int(weather_text_w) + 10
-    draw.text((outdoor_x, 48), "湿度", font=font_item, fill=0)
-    draw.text((outdoor_x, 66), weather['humidity'], font=font_item, fill=0)
+    # 天气文字基准线 y=77，湿度值底部对齐它，标签在上一行
+    draw.text((outdoor_x, 59), "湿度", font=font_item, fill=0)
+    draw.text((outdoor_x, 77), weather['humidity'], font=font_item, fill=0)
 
     # 🌟 侧边右侧黑色背景框 - 室内/体感（右边界与日程区域对齐）
-    draw.rounded_rectangle([(240, 40), (385, 116)], radius=8, outline=0, fill=0)
-    draw.text((250, 48), f"室内 {indoor['indoor_temp']} {indoor['indoor_humidity']}", font=font_small, fill=255)
-    draw.text((250, 72), f"内体感 {feel_temp}", font=font_small, fill=255)
-    draw.text((250, 96), f"外体感 {outdoor_feel}", font=font_small, fill=255)
+    draw.rounded_rectangle([(240, 50), (385, 126)], radius=8, outline=0, fill=0)
+    draw.text((250, 58), f"室内 {indoor['indoor_temp']} {indoor['indoor_humidity']}", font=font_small, fill=255)
+    draw.text((250, 82), f"内体感 {feel_temp}", font=font_small, fill=255)
+    draw.text((250, 106), f"外体感 {outdoor_feel}", font=font_small, fill=255)
 
     # 🌟 日出日落 + 风力（同一行，下移）
     draw.text((25, 145), "A", font=font_weather_icon_small, fill=0, anchor="lm")
