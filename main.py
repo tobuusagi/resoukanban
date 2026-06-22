@@ -719,9 +719,9 @@ def task_weather_dashboard(device_config):
     # 2. 当日最高最低气温
     draw.text((25, 45), f"{weather['temp_low']}° / {weather['temp_high']}°", font=font_item, fill=0)
     
-    # 3. 实时温度（底部对齐 y=77）
+    # 3. 实时温度（底部对齐 ~y=113）
     curr_temp_str = f"{weather['temp_curr']}°"
-    draw.text((25, 77), curr_temp_str, font=font_48, fill=0)
+    draw.text((25, 65), curr_temp_str, font=font_48, fill=0)
     
     try:
         temp_w = draw.textlength(curr_temp_str, font=font_48)
@@ -739,20 +739,11 @@ def task_weather_dashboard(device_config):
         current_icon = get_weather_icon(weather['weather'])
         draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
 
-    # 🌟 室外湿度 - 天气文字右边双排显示，底部对齐天气文字
-    try:
-        icon_w = draw.textlength(current_icon, font=font_weather_icon_large)
-    except AttributeError:
-        icon_w = draw.textbbox((0, 0), current_icon, font=font_weather_icon_large)[2]
-    try:
-        weather_text_w = draw.textlength(weather['weather'], font=font_36)
-    except AttributeError:
-        weather_text_w = draw.textbbox((0, 0), weather['weather'], font=font_36)[2]
-    # 取图标和文字中较宽的，确保湿度在两者右边
-    outdoor_x = wx_x + max(int(icon_w), int(weather_text_w)) + 10
-    # 天气文字基准线 y=77，湿度值底部对齐它，标签在上一行
-    draw.text((outdoor_x, 59), "湿度", font=font_item, fill=0)
-    draw.text((outdoor_x, 77), weather['humidity'], font=font_item, fill=0)
+    # 🌟 室外湿度 - 天气文字右边双排显示，与天气文字等高(36px=2×18px)
+    weather_bbox = draw.textbbox((wx_x, 77), weather['weather'], font=font_36)
+    outdoor_x = weather_bbox[2] + 12  # 天气文字右边缘 + 间距
+    draw.text((outdoor_x, 77), "湿度", font=font_item, fill=0)
+    draw.text((outdoor_x, 95), weather['humidity'], font=font_item, fill=0)
 
     # 🌟 侧边右侧黑色背景框 - 室内/体感（右边界与日程区域对齐）
     draw.rounded_rectangle([(240, 50), (385, 126)], radius=8, outline=0, fill=0)
