@@ -649,6 +649,20 @@ def calculate_feel_temp(indoor_temp_str, indoor_humid_str):
         print(f"⚠️ 计算体感温度失败: {e}")
         return "--"
 
+# --- 计算室外体感温度（澳大利亚气象局公式） ---
+def calculate_outdoor_feel(temp_str, humidity_str):
+    """基于室外温湿度计算体感温度（AT = T + 0.33*e - 4.00，澳大利亚气象局）"""
+    try:
+        import math
+        t = float(str(temp_str).replace("°C", "").replace("°", "").strip())
+        rh = float(str(humidity_str).replace("%", "").strip())
+        e = rh / 100.0 * 6.105 * math.exp(17.27 * t / (237.7 + t))
+        at = t + 0.33 * e - 4.00
+        return f"{round(at, 1)}°C"
+    except Exception as e:
+        print(f"⚠️ 计算室外体感失败: {e}")
+        return "--"
+
 # --- 任务：天气看板（单设备） ---
 def task_weather_dashboard(device_config):
     """为单个设备生成天气看板"""
@@ -718,14 +732,14 @@ def task_weather_dashboard(device_config):
         current_icon = get_weather_icon(weather['weather'])
         draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
 
-    # 🌟 室外温湿度 - 天气文字右边双排显示（font_item，行距18px对齐font_36高度）
+    # 🌟 室外湿度 - 天气文字右边双排显示（font_item，行距18px对齐font_36高度）
     try:
         weather_text_w = draw.textlength(weather['weather'], font=font_36)
     except AttributeError:
         weather_text_w = draw.textbbox((0, 0), weather['weather'], font=font_36)[2]
     outdoor_x = wx_x + int(weather_text_w) + 10
-    draw.text((outdoor_x, 48), f"{weather['temp_curr']}° {weather['humidity']}", font=font_item, fill=0)
-    draw.text((outdoor_x, 66), f"外体感 {outdoor_feel}", font=font_item, fill=0)
+    draw.text((outdoor_x, 48), "湿度", font=font_item, fill=0)
+    draw.text((outdoor_x, 66), weather['humidity'], font=font_item, fill=0)
 
     # 🌟 侧边右侧黑色背景框 - 室内/体感（右边界与日程区域对齐）
     draw.rounded_rectangle([(240, 40), (385, 116)], radius=8, outline=0, fill=0)
@@ -852,18 +866,3 @@ if __name__ == "__main__":
         task_weather_dashboard(config)
     
     print("\n🎉 所有任务执行完毕！")
-
-# --- 计算室外体感温度（澳大利亚气象局公式） ---
-def calculate_outdoor_feel(temp_str, humidity_str):
-    """基于室外温湿度计算体感温度（AT = T + 0.33*e - 4.00，澳大利亚气象局）"""
-    try:
-        t = float(str(temp_str).replace("°C", "").replace("°", "").strip())
-        rh = float(str(humidity_str).replace("%", "").strip())
-        # 水汽压 e = RH/100 * 6.105 * exp(17.27*T/(237.7+T))
-        import math
-        e = rh / 100.0 * 6.105 * math.exp(17.27 * t / (237.7 + t))
-        at = t + 0.33 * e - 4.00
-        return f"{round(at, 1)}°C"
-    except Exception as e:
-        print(f"⚠️ 计算室外体感失败: {e}")
-        return "--"
