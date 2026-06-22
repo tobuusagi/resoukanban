@@ -237,6 +237,7 @@ def get_solar_term(year, month, day):
     return term_table.get((year, month, day), None)
 
 def get_lunar_or_festival(y, m, d):
+    """获取农历节日/节气/公历节日，非特殊日期返回短农历（如'十六'）"""
     term = get_solar_term(y, m, d)
     if term: return term
     solar_fests = {
@@ -250,7 +251,11 @@ def get_lunar_or_festival(y, m, d):
         lunar_fests = {(1,1):"春节", (1,15):"元宵", (5,5):"端午", (7,7):"七夕", (7,15):"中元", (8,15):"中秋", (9,9):"重阳", (12,30):"除夕"}
         if (lunar.lunar_month, lunar.lunar_day) in lunar_fests:
             return lunar_fests[(lunar.lunar_month, lunar.lunar_day)]
-        return lunar.chinese()
+        # 只返回农历日（如"十六"），不带年份
+        lunar_days = ['','初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
+                      '十一','十二','十三','十四','十五','十六','十七','十八','十九','二十',
+                      '廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十']
+        return lunar_days[lunar.lunar_day] if lunar.lunar_day <= 30 else ""
     except:
         return ""
 
