@@ -117,20 +117,28 @@ def get_wrapped_lines(text, max_chars=18):
         text = text[max_chars:]
     return lines
 
-def get_clothing_advice(temp, humidity_str):
+def get_clothing_advice(feel_temp_str):
+    """根据体感温度给出穿衣建议"""
     try:
-        t = int(temp)
-        h = int(humidity_str.replace('%', '')) if isinstance(humidity_str, str) else int(humidity_str)
-        if t >= 28:
-            return "闷热，穿透气短袖短裤。" if h >= 70 else "炎热，穿薄短袖并防晒。"
-        elif t > 22:
-            return "湿热，建议穿宽松T恤。" if h >= 70 else "舒适，穿T恤配单裤即可。"
-        elif t > 16:
-            return "偏湿凉，穿长袖加薄外套。" if h >= 70 else "清凉，穿长袖衬衫或卫衣。"
-        elif t > 10:
-            return "湿冷透骨，建议穿厚夹克。" if h >= 70 else "偏冷，穿风衣或保暖毛衣。"
-        elif t > 5:
-            return "湿冷，穿大衣及保暖内衣。" if h >= 60 else "干冷，建议穿大衣薄羽绒。"
+        t = float(str(feel_temp_str).replace("°C", "").replace("°", "").strip())
+        if t >= 35:
+            return "极热，尽量待在室内，穿透气防晒衣物。"
+        elif t >= 32:
+            return "炎热，穿薄短袖短裤，注意防晒补水。"
+        elif t >= 28:
+            return "偏热，穿短袖短裤即可。"
+        elif t >= 24:
+            return "舒适，穿T恤配单裤。"
+        elif t >= 20:
+            return "微凉，穿长袖衬衫或薄卫衣。"
+        elif t >= 16:
+            return "偏凉，穿长袖加薄外套。"
+        elif t >= 12:
+            return "凉，穿风衣或夹克。"
+        elif t >= 8:
+            return "冷，穿厚外套或薄羽绒。"
+        elif t >= 4:
+            return "很冷，穿大衣加保暖内衣。"
         else:
             return "严寒，穿厚羽绒服重保暖。"
     except:
@@ -662,8 +670,9 @@ def task_weather_dashboard(device_config):
     # 获取室内数据
     indoor = get_ha_indoor_data(temp_sensor, humid_sensor)
     
-    # 计算体感温度（基于室内温湿度）
+    # 计算体感温度
     feel_temp = calculate_feel_temp(indoor["indoor_temp"], indoor["indoor_humidity"])
+    outdoor_feel = calculate_outdoor_feel(weather['temp_curr'], weather['humidity'])
     
     if weather["temp_curr"] == 0 and not weather["forecasts"]:
         draw.text((20, 50), "天气数据获取失败", font=font_item, fill=0)
@@ -709,11 +718,20 @@ def task_weather_dashboard(device_config):
         current_icon = get_weather_icon(weather['weather'])
         draw.text((wx_x, 42), current_icon, font=font_weather_icon_large, fill=0)
 
-    # 🌟 侧边右侧黑色背景框 - 室内/室外/体感（右边界与日程区域对齐）
-    draw.rounded_rectangle([(240, 40), (385, 130)], radius=8, outline=0, fill=0)
+    # 🌟 室外温湿度 - 天气文字右边双排显示（font_item，行距18px对齐font_36高度）
+    try:
+        weather_text_w = draw.textlength(weather['weather'], font=font_36)
+    except AttributeError:
+        weather_text_w = draw.textbbox((0, 0), weather['weather'], font=font_36)[2]
+    outdoor_x = wx_x + int(weather_text_w) + 10
+    draw.text((outdoor_x, 48), f"{weather['temp_curr']}° {weather['humidity']}", font=font_item, fill=0)
+    draw.text((outdoor_x, 66), f"外体感 {outdoor_feel}", font=font_item, fill=0)
+
+    # 🌟 侧边右侧黑色背景框 - 室内/体感（右边界与日程区域对齐）
+    draw.rounded_rectangle([(240, 40), (385, 116)], radius=8, outline=0, fill=0)
     draw.text((250, 48), f"室内 {indoor['indoor_temp']} {indoor['indoor_humidity']}", font=font_small, fill=255)
-    draw.text((250, 72), f"室外 {weather['humidity']}", font=font_small, fill=255)
-    draw.text((250, 96), f"体感 {feel_temp}", font=font_small, fill=255)
+    draw.text((250, 72), f"内体感 {feel_temp}", font=font_small, fill=255)
+    draw.text((250, 96), f"外体感 {outdoor_feel}", font=font_small, fill=255)
 
     # 🌟 日出日落 + 风力（同一行，下移）
     draw.text((25, 145), "A", font=font_weather_icon_small, fill=0, anchor="lm")
@@ -804,7 +822,7 @@ def task_weather_dashboard(device_config):
             draw.text((x, 213), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
 
-    advice = get_clothing_advice(weather['temp_curr'], indoor['indoor_humidity'])
+    advice = get_clothing_advice(outdoor_feel)
     draw.line([(20, 243), (380, 243)], fill=0, width=1)
     advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]
     for i, line in enumerate(advice_lines[:2]):
@@ -834,3 +852,18 @@ if __name__ == "__main__":
         task_weather_dashboard(config)
     
     print("\n🎉 所有任务执行完毕！")
+
+# --- 计算室外体感温度（澳大利亚气象局公式） ---
+def calculate_outdoor_feel(temp_str, humidity_str):
+    """基于室外温湿度计算体感温度（AT = T + 0.33*e - 4.00，澳大利亚气象局）"""
+    try:
+        t = float(str(temp_str).replace("°C", "").replace("°", "").strip())
+        rh = float(str(humidity_str).replace("%", "").strip())
+        # 水汽压 e = RH/100 * 6.105 * exp(17.27*T/(237.7+T))
+        import math
+        e = rh / 100.0 * 6.105 * math.exp(17.27 * t / (237.7 + t))
+        at = t + 0.33 * e - 4.00
+        return f"{round(at, 1)}°C"
+    except Exception as e:
+        print(f"⚠️ 计算室外体感失败: {e}")
+        return "--"
