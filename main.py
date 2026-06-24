@@ -1,9 +1,11 @@
 import os
 import json
+import time
 import requests
 import calendar
 import re
 import math
+import random
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta
 from zhdate import ZhDate
@@ -460,7 +462,7 @@ def get_todo_data():
 
 # --- HA 室内数据获取 ---
 def get_ha_indoor_data(temp_sensor, humid_sensor):
-    """从 Home Assistant 获取室内温湿度数据"""
+    """从 Home Assistant 获取室内温湿度数据（失败后1分钟重试一次）"""
     result = {"indoor_temp": "--", "indoor_humidity": "--"}
     
     if not HA_URL or not HA_TOKEN:
@@ -472,40 +474,62 @@ def get_ha_indoor_data(temp_sensor, humid_sensor):
         "Content-Type": "application/json"
     }
     
-    # 获取温度
-    if temp_sensor:
+    def _fetch_sensor(sensor_url):
+        """请求单个传感器，成功返回值，失败返回None"""
         try:
-            url = f"{HA_URL}/api/states/{temp_sensor}"
-            resp = requests.get(url, headers=headers, timeout=10)
+            resp = requests.get(sensor_url, headers=headers, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 state = data.get("state", "")
-                unit = data.get("attributes", {}).get("unit_of_measurement", "°C")
-                result["indoor_temp"] = f"{state}{unit}"
+                unit = data.get("attributes", {}).get("unit_of_measurement", "")
+                return f"{state}{unit}"
             else:
-                print(f"⚠️ 获取温度传感器失败: {resp.status_code}")
+                print(f"⚠️ 传感器请求失败: {resp.status_code}")
+                return None
         except Exception as e:
-            print(f"❌ 获取温度传感器异常: {e}")
+            print(f"❌ 传感器请求异常: {e}")
+            return None
+    
+    need_retry = False
+    
+    # 获取温度
+    if temp_sensor:
+        url = f"{HA_URL}/api/states/{temp_sensor}"
+        val = _fetch_sensor(url)
+        if val is not None:
+            result["indoor_temp"] = val
+        else:
+            need_retry = True
     
     # 获取湿度
     if humid_sensor:
-        try:
+        url = f"{HA_URL}/api/states/{humid_sensor}"
+        val = _fetch_sensor(url)
+        if val is not None:
+            result["indoor_humidity"] = val
+        else:
+            need_retry = True
+    
+    # 有失败则等1分钟后重试一次
+    if need_retry:
+        print("⏳ HA请求失败，60秒后重试...")
+        time.sleep(60)
+        if temp_sensor and result["indoor_temp"] == "--":
+            url = f"{HA_URL}/api/states/{temp_sensor}"
+            val = _fetch_sensor(url)
+            if val is not None:
+                result["indoor_temp"] = val
+        if humid_sensor and result["indoor_humidity"] == "--":
             url = f"{HA_URL}/api/states/{humid_sensor}"
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                state = data.get("state", "")
-                unit = data.get("attributes", {}).get("unit_of_measurement", "%")
-                result["indoor_humidity"] = f"{state}{unit}"
-            else:
-                print(f"⚠️ 获取湿度传感器失败: {resp.status_code}")
-        except Exception as e:
-            print(f"❌ 获取湿度传感器异常: {e}")
+            val = _fetch_sensor(url)
+            if val is not None:
+                result["indoor_humidity"] = val
     
     return result
 
-# --- 天气缓存 ---
+# --- 天气缓存（按城市分别缓存，30分钟有效期） ---
 WEATHER_CACHE_FILE = "weather_cache.json"
+WEATHER_CACHE_TTL = 30 * 60  # 30分钟（秒）
 
 def _load_weather_cache():
     try:
@@ -514,19 +538,33 @@ def _load_weather_cache():
                 return json.load(f)
     except:
         pass
-    return None
+    return {}
 
-def _save_weather_cache(data):
+def _save_weather_cache(cache_dict):
     try:
         with open(WEATHER_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        print("💾 天气数据已缓存")
+            json.dump(cache_dict, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"⚠️ 缓存写入失败: {e}")
 
+def _is_cache_fresh(cache_entry):
+    """检查缓存条目是否在有效期内（30分钟 + 随机偏移，避开整点）"""
+    cache_time_str = cache_entry.get("_cache_time", "")
+    if not cache_time_str:
+        return False
+    try:
+        cache_time = datetime.strptime(cache_time_str, "%Y-%m-%d %H:%M")
+        now_beijing = datetime.utcnow() + timedelta(hours=8)
+        elapsed = (now_beijing - cache_time).total_seconds()
+        # 读取存储的偏移量，没有则用基础TTL
+        jitter = cache_entry.get("_cache_jitter", 0)
+        return elapsed < (WEATHER_CACHE_TTL + jitter)
+    except:
+        return False
+
 # --- 混合天气获取 ---
 def get_hybrid_weather(city_code, location):
-    """获取指定城市的天气数据"""
+    """获取指定城市的天气数据（30分钟缓存）"""
     result = {
         "weather": "未知", "temp_curr": 0, 
         "temp_low": 0, "temp_high": 0, "wind_info": "无数据", "humidity": "0%", 
@@ -538,6 +576,14 @@ def get_hybrid_weather(city_code, location):
         print("⚠️ 未设置 AMAP_WEATHER_KEY")
         result["request_failed"] = True
         return result
+
+    # --- 检查缓存是否在30分钟有效期内 ---
+    all_cache = _load_weather_cache()
+    city_cache = all_cache.get(city_code, {})
+    if _is_cache_fresh(city_cache):
+        print(f"💾 天气缓存命中（{city_code}，30分钟内有效），跳过API调用")
+        city_cache["request_failed"] = False
+        return city_cache
 
     # --- 高德实时天气 ---
     amap_live_ok = False
@@ -596,33 +642,37 @@ def get_hybrid_weather(city_code, location):
     # --- 判断是否需要回退到缓存 ---
     if not amap_live_ok:
         print("⚠️ 高德实时请求失败，尝试使用缓存数据...")
-        cached = _load_weather_cache()
-        if cached:
+        if city_cache:
             if not amap_forecast_ok:
-                cached["request_failed"] = True
-                return cached
+                city_cache["request_failed"] = True
+                return city_cache
             else:
-                result["weather"] = cached.get("weather", "未知")
-                result["temp_curr"] = cached.get("temp_curr", 0)
-                result["humidity"] = cached.get("humidity", "0%")
-                result["wind_info"] = cached.get("wind_info", "无数据")
-                result["feel_temp"] = cached.get("feel_temp", "N/A")
-                result["sunrise"] = cached.get("sunrise", "--:--") if not wttr_ok else result["sunrise"]
-                result["sunset"] = cached.get("sunset", "--:--") if not wttr_ok else result["sunset"]
+                result["weather"] = city_cache.get("weather", "未知")
+                result["temp_curr"] = city_cache.get("temp_curr", 0)
+                result["humidity"] = city_cache.get("humidity", "0%")
+                result["wind_info"] = city_cache.get("wind_info", "无数据")
+                result["feel_temp"] = city_cache.get("feel_temp", "N/A")
+                result["sunrise"] = city_cache.get("sunrise", "--:--") if not wttr_ok else result["sunrise"]
+                result["sunset"] = city_cache.get("sunset", "--:--") if not wttr_ok else result["sunset"]
                 result["request_failed"] = True
-                result["_cache_time"] = cached.get("_cache_time", "未知")
-                _save_weather_cache(result)
+                result["_cache_time"] = city_cache.get("_cache_time", "未知")
+                all_cache[city_code] = result
+                _save_weather_cache(all_cache)
                 return result
         else:
             if not amap_forecast_ok:
                 result["request_failed"] = True
                 return result
 
-    # --- 成功获取数据，保存缓存 ---
+    # --- 成功获取数据，保存缓存（按城市，随机偏移避开整点） ---
     now_beijing = datetime.utcnow() + timedelta(hours=8)
     result["_cache_time"] = now_beijing.strftime("%Y-%m-%d %H:%M")
+    # 随机偏移 1~10 分钟，让下次查询时间不落在整点/半点
+    result["_cache_jitter"] = random.randint(60, 600)
     result["request_failed"] = False
-    _save_weather_cache(result)
+    all_cache[city_code] = result
+    _save_weather_cache(all_cache)
+    print(f"💾 天气数据已缓存（{city_code}，有效期{30 + result['_cache_jitter']//60}分钟）")
     return result
 
 # --- 计算体感温度（基于室内温湿度） ---
