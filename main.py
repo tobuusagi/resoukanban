@@ -526,7 +526,7 @@ def get_ha_indoor_data(temp_sensor, humid_sensor):
     
     return result
 
-# --- 天气缓存（按城市分别缓存，30分钟有效期） ---
+# --- 天气缓存（按城市分别缓存，29分钟有效期） ---
 WEATHER_CACHE_FILE = "weather_cache.json"
 WEATHER_CACHE_TTL = 29 * 60  # 29分钟，在:05/:35查询后于:04/:34过期
 
