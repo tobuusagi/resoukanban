@@ -5,7 +5,6 @@ import requests
 import calendar
 import re
 import math
-import random
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta
 from zhdate import ZhDate
@@ -529,7 +528,7 @@ def get_ha_indoor_data(temp_sensor, humid_sensor):
 
 # --- 天气缓存（按城市分别缓存，30分钟有效期） ---
 WEATHER_CACHE_FILE = "weather_cache.json"
-WEATHER_CACHE_TTL = 30 * 60  # 30分钟（秒）
+WEATHER_CACHE_TTL = 29 * 60  # 29分钟，在:05/:35查询后于:04/:34过期
 
 def _load_weather_cache():
     try:
@@ -548,7 +547,7 @@ def _save_weather_cache(cache_dict):
         print(f"⚠️ 缓存写入失败: {e}")
 
 def _is_cache_fresh(cache_entry):
-    """检查缓存条目是否在有效期内（30分钟 + 随机偏移，避开整点）"""
+    """检查缓存条目是否在有效期内"""
     cache_time_str = cache_entry.get("_cache_time", "")
     if not cache_time_str:
         return False
@@ -556,9 +555,7 @@ def _is_cache_fresh(cache_entry):
         cache_time = datetime.strptime(cache_time_str, "%Y-%m-%d %H:%M")
         now_beijing = datetime.utcnow() + timedelta(hours=8)
         elapsed = (now_beijing - cache_time).total_seconds()
-        # 读取存储的偏移量，没有则用基础TTL
-        jitter = cache_entry.get("_cache_jitter", 0)
-        return elapsed < (WEATHER_CACHE_TTL + jitter)
+        return elapsed < WEATHER_CACHE_TTL
     except:
         return False
 
@@ -664,15 +661,13 @@ def get_hybrid_weather(city_code, location):
                 result["request_failed"] = True
                 return result
 
-    # --- 成功获取数据，保存缓存（按城市，随机偏移避开整点） ---
+    # --- 成功获取数据，保存缓存（按城市） ---
     now_beijing = datetime.utcnow() + timedelta(hours=8)
     result["_cache_time"] = now_beijing.strftime("%Y-%m-%d %H:%M")
-    # 随机偏移 1~10 分钟，让下次查询时间不落在整点/半点
-    result["_cache_jitter"] = random.randint(60, 600)
     result["request_failed"] = False
     all_cache[city_code] = result
     _save_weather_cache(all_cache)
-    print(f"💾 天气数据已缓存（{city_code}，有效期{30 + result['_cache_jitter']//60}分钟）")
+    print(f"💾 天气数据已缓存（{city_code}）")
     return result
 
 # --- 计算体感温度（基于室内温湿度） ---
