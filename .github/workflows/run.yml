@@ -1,9 +1,6 @@
 name: 墨水屏综合看板推送
 
 on:
-  schedule:
-  - cron: '5,15,25,35,45,55 6-23,0 * * *'
-  - cron: '5,35 1 * * *' # 每10分钟运行，天气每30分钟刷新
   workflow_dispatch:
 
 env:
