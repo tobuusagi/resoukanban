@@ -47,16 +47,30 @@ def get_device_configs():
             "name": "新北区"
         })
     
+    # ===== 暑假注释：办公室天宁区天气暂时关闭，开学恢复 =====
     # 办公室
+    # office_mac = os.environ.get("OFFICE_MAC", "")
+    # if office_mac:
+    #     configs.append({
+    #         "mac": office_mac.strip(),
+    #         "city": os.environ.get("OFFICE_CITY_ADCODE", ""),
+    #         "location": os.environ.get("OFFICE_WTTR_LOCATION", ""),
+    #         "temp_sensor": os.environ.get("OFFICE_HA_TEMP_SENSOR", ""),
+    #         "humid_sensor": os.environ.get("OFFICE_HA_HUMID_SENSOR", ""),
+    #         "name": "天宁区"
+    #     })
+    # ===== 暑假注释结束 =====
+
+    # 暑假：办公室设备也推送新北区天气
     office_mac = os.environ.get("OFFICE_MAC", "")
     if office_mac:
         configs.append({
             "mac": office_mac.strip(),
-            "city": os.environ.get("OFFICE_CITY_ADCODE", ""),
-            "location": os.environ.get("OFFICE_WTTR_LOCATION", ""),
-            "temp_sensor": os.environ.get("OFFICE_HA_TEMP_SENSOR", ""),
-            "humid_sensor": os.environ.get("OFFICE_HA_HUMID_SENSOR", ""),
-            "name": "天宁区"
+            "city": os.environ.get("HOME_CITY_ADCODE", "320402"),
+            "location": os.environ.get("HOME_WTTR_LOCATION", "Tianning,Changzhou"),
+            "temp_sensor": os.environ.get("HOME_HA_TEMP_SENSOR", ""),
+            "humid_sensor": os.environ.get("HOME_HA_HUMID_SENSOR", ""),
+            "name": "新北区"
         })
     
     # 兼容旧版：如果没有 HOME_/OFFICE_ 配置，使用原来的 ZECTRIX_MAC
